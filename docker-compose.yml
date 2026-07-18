@@ -1,0 +1,12 @@
+services:
+  osdev:
+    build:
+      context: .
+      args:
+        LPYTHON_URL: https://github.com/lcompilers/lpython.git
+    volumes:
+      - .:/work
+    ports:
+      - "127.0.0.1:5900:5900"
+    working_dir: /work
+    command: bash
