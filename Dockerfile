@@ -4,7 +4,7 @@ FROM condaforge/miniforge3:latest
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libc6-dev-i386 clang lld nasm grub-pc-bin xorriso qemu-system-x86 make \
+    build-essential libc6-dev-i386 clang lld grub-pc-bin xorriso qemu-system-x86 make \
     binutils-dev && \
     rm -rf /var/lib/apt/lists/*
 

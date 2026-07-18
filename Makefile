@@ -15,8 +15,8 @@ $(BUILD):
 $(DATA):
 	mkdir -p storage
 	truncate -s 4M $@
-$(BUILD)/ui_fill.o: tools/gen_ui_object.py | $(BUILD)
-	python3 tools/gen_ui_object.py $@
+$(BUILD)/hw.o: tools/gen_hw_object.py | $(BUILD)
+	python3 tools/gen_hw_object.py $@
 
 # LPython emits C; final image is a freestanding i386 Multiboot kernel.
 $(BUILD)/kernel.c: kernel/main.py | $(BUILD)
@@ -28,11 +28,8 @@ $(BUILD)/kernel.o: $(BUILD)/kernel.c
 $(BUILD)/boot.o: boot/boot.S | $(BUILD)
 	clang -target i386-elf -ffreestanding -fno-stack-protector -fno-pic -c $< -o $@
 
-$(BUILD)/keyboard.o: kernel/keyboard.asm | $(BUILD)
-	nasm -f elf32 $< -o $@
-
-$(KERNEL): $(BUILD)/boot.o $(BUILD)/kernel.o $(BUILD)/keyboard.o $(BUILD)/ui_fill.o linker.ld
-	ld.lld -m elf_i386 -T linker.ld -o $@ $(BUILD)/boot.o $(BUILD)/kernel.o $(BUILD)/keyboard.o $(BUILD)/ui_fill.o
+$(KERNEL): $(BUILD)/boot.o $(BUILD)/kernel.o $(BUILD)/hw.o linker.ld
+	ld.lld -m elf_i386 -T linker.ld -o $@ $(BUILD)/boot.o $(BUILD)/kernel.o $(BUILD)/hw.o
 
 $(ISO): $(KERNEL) grub/grub.cfg
 	mkdir -p $(BUILD)/iso/boot/grub

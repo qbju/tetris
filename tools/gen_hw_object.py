@@ -1,4 +1,4 @@
-"""CPython+llvmlite emits the freestanding VGA renderer object."""
+"""CPython+llvmlite emits freestanding i386 hardware primitives."""
 from __future__ import annotations
 
 import sys
@@ -8,6 +8,7 @@ from llvmlite import binding, ir
 def build() -> bytes:
     binding.initialize_all_targets()
     binding.initialize_all_asmprinters()
+    binding.initialize_native_asmparser()
     module = ir.Module(name="tetris_ui")
     module.triple = "i386-unknown-elf"
     i16, i32, void = ir.IntType(16), ir.IntType(32), ir.VoidType()
@@ -52,6 +53,47 @@ def build() -> bytes:
     buffer_set_builder.store(buffer_set_value, buffer_set_pointer)
     buffer_set_builder.ret_void()
 
+    asm_clobbers = ",~{dirflag},~{fpsr},~{flags}"
+
+    def build_port_in(name: str, value_type: ir.IntType, opcode: str) -> None:
+        port_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name=name)
+        port_builder = ir.IRBuilder(port_fn.append_basic_block("entry"))
+        port = port_builder.trunc(port_fn.args[0], i16)
+        value = port_builder.asm(
+            ir.FunctionType(value_type, [i16]),
+            f"{opcode} $1, $0",
+            "={ax},{dx}" + asm_clobbers,
+            [port],
+            side_effect=True,
+        )
+        port_builder.ret(port_builder.zext(value, i32))
+
+    def build_port_out(name: str, value_type: ir.IntType, opcode: str) -> None:
+        port_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name=name)
+        port_builder = ir.IRBuilder(port_fn.append_basic_block("entry"))
+        port = port_builder.trunc(port_fn.args[0], i16)
+        value = port_builder.trunc(port_fn.args[1], value_type)
+        port_builder.asm(
+            ir.FunctionType(void, [value_type, i16]),
+            f"{opcode} $0, $1",
+            "{ax},{dx}" + asm_clobbers,
+            [value, port],
+            side_effect=True,
+        )
+        port_builder.ret_void()
+
+    build_port_in("io_in8", ir.IntType(8), "inb")
+    build_port_out("io_out8", ir.IntType(8), "outb")
+    build_port_in("io_in16", i16, "inw")
+    build_port_out("io_out16", i16, "outw")
+
+    argv_fn = ir.Function(
+        module,
+        ir.FunctionType(void, [i32, ir.IntType(8).as_pointer().as_pointer()]),
+        name="_lpython_set_argv",
+    )
+    argv_builder = ir.IRBuilder(argv_fn.append_basic_block("entry"))
+    argv_builder.ret_void()
     fn = ir.Function(module, ir.FunctionType(void, [i32, i32, i32, i32]), name="ui_put_cell")
     x, y, glyph, colour = fn.args
     block = fn.append_basic_block("entry")
@@ -71,6 +113,6 @@ def build() -> bytes:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise SystemExit("usage: gen_ui_object.py OUTPUT.o")
+        raise SystemExit("usage: gen_hw_object.py OUTPUT.o")
     with open(sys.argv[1], "wb") as output:
         output.write(build())
