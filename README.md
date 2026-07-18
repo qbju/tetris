@@ -147,4 +147,4 @@ build/pythonos.iso
 
 ## ライセンス
 
-ライセンスを設定する場合は`LICENSE`ファイルを追加してください。
+このプロジェクトは[MIT License](LICENSE)で公開されています。
