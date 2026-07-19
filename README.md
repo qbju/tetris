@@ -4,7 +4,9 @@ LPythonでゲームロジックを書き、CPython + llvmliteでi386向けのハ
 
 GRUB Multiboot2からベアメタルで起動します。Pythonインタプリタや既存OSの上でゲームを動かしているわけではありません。LPythonがPythonコードをCへ変換し、Clang/LLDでカーネルへコンパイル・リンクします。
 
-![TETRIS OS gameplay](play.gif)
+<p align="center">
+  <img src="play.gif" alt="TETRIS OS gameplay" width="640">
+</p>
 
 ## 特徴
 
