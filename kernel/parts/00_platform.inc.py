@@ -68,6 +68,7 @@ control_mode: i32 = 0
 bgm_volume: i32 = 6
 se_volume: i32 = 5
 debug_enabled: i32 = 1
+clock_enabled: i32 = 1
 settings_generation: i32 = 0
 settings_slot: i32 = 0
 max_combo: i32 = 0
@@ -79,6 +80,20 @@ total_pieces: i32 = 0
 stats_generation: i32 = 0
 stats_slot: i32 = 0
 stats_last_period: i32 = 0
+achievements: i32 = 0
+achievement_generation: i32 = 0
+achievement_slot: i32 = 0
+achievement_popup: i32 = -1
+achievement_popup_until: i32 = 0
+konami_progress: i32 = 0
+achievement_page: i32 = 0
+achievement_selection: i32 = 0
+achievement_detail_open: i32 = 0
+session_lines: i32 = 0
+session_silent: i32 = 0
+session_palette: i32 = 0
+impossible_enabled: i32 = 0
+game_start_rtc: i32 = 0
 system_periods: i32 = 0
 music_index: i32 = 0
 music_deadline: i32 = 0
@@ -102,6 +117,26 @@ bag_index: i32 = 7
 last_bag_kind: i32 = -1
 rng_state: i32 = 1
 
+def rtc_read(register: i32) -> i32:
+    io_out8(0x70, register)
+    return io_in8(0x71)
+
+def bcd_value(value: i32) -> i32:
+    return (value & 15) + ((value >> 4) & 15) * 10
+
+def rtc_seconds_of_day() -> i32:
+    attempts: i32 = 0
+    while (rtc_read(0x0A) & 0x80) != 0 and attempts < 1000:
+        attempts = attempts + 1
+    second: i32 = rtc_read(0)
+    minute: i32 = rtc_read(2)
+    hour: i32 = rtc_read(4)
+    status_b: i32 = rtc_read(0x0B)
+    if (status_b & 4) == 0:
+        second = bcd_value(second)
+        minute = bcd_value(minute)
+        hour = bcd_value(hour & 0x7F)
+    return hour * 3600 + minute * 60 + second
 def keyboard_scancode() -> i32:
     while (io_in8(0x64) & 1) != 0:
         status: i32 = io_in8(0x64)

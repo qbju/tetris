@@ -37,6 +37,8 @@ def merge_piece() -> None:
     global merge_count, total_pieces
     merge_count = merge_count + 1
     total_pieces = total_pieces + 1
+    unlock_achievement(0)
+    if total_pieces >= 100: unlock_achievement(3)
     mask: i32 = shape(kind, rotation)
     cell: i32 = 0
     while cell < 16:
@@ -77,13 +79,20 @@ def clear_lines() -> i32:
     return cleared
 
 def update_combo(cleared: i32) -> None:
-    global current_combo, score, total_lines
+    global current_combo, score, total_lines, session_lines
     if cleared > 0:
         total_lines = total_lines + cleared
+        session_lines = session_lines + cleared
+        unlock_achievement(1)
+        if cleared >= 4: unlock_achievement(2)
+        if total_lines >= 100: unlock_achievement(5)
         current_combo = current_combo + 1
         if current_combo > 1:
             score = score + (current_combo - 1) * 50
         fs_save_max_combo(current_combo)
+        if current_combo >= 3: unlock_achievement(7)
+        if current_combo >= 8: unlock_achievement(8)
+        if score >= 10000: unlock_achievement(4)
     else:
         current_combo = 0
 def seed_rng() -> None:
@@ -176,7 +185,7 @@ def draw_preview(preview_kind: i32, origin_x: i32, origin_y: i32) -> None:
     if preview_kind >= 0:
         preview_mask: i32 = shape(preview_kind, 0)
         preview_cell: i32 = 0
-        preview_colour: i32 = 0x09 + (preview_kind + 1) % 6
+        preview_colour: i32 = 0x0A + preview_kind % 6
         while preview_cell < 16:
             if (preview_mask & (1 << preview_cell)) != 0:
                 px: i32 = origin_x + (preview_cell % 4) * 2
@@ -247,7 +256,7 @@ def draw() -> None:
             glyph: i32 = 32
             if value != 0:
                 # value is kind + 1. Match the falling piece exactly.
-                colour = 0x09 + value % 6
+                colour = 0x0A + (value - 1) % 6
                 glyph = 219
             ui_put_cell(5 + x * 2, 2 + y, glyph, colour)
             ui_put_cell(6 + x * 2, 2 + y, glyph, colour)
@@ -270,7 +279,7 @@ def draw() -> None:
 
     mask: i32 = shape(kind, rotation)
     cell: i32 = 0
-    active_colour: i32 = 0x09 + (kind + 1) % 6
+    active_colour: i32 = 0x0A + kind % 6
     while cell < 16:
         if (mask & (1 << cell)) != 0:
             block_x: i32 = 5 + (piece_x + cell % 4) * 2
@@ -316,6 +325,15 @@ def draw() -> None:
     text(44, 2, 78, 0x0F); text(45, 2, 69, 0x0F)
     text(46, 2, 88, 0x0F); text(47, 2, 84, 0x0F); text(48, 2, 58, 0x0F)
     draw_preview(next_kind, 44, 4)
+    if (achievements & (1 << 12)) != 0 and clock_enabled == 1:
+        elapsed_rtc: i32 = rtc_seconds_of_day() - game_start_rtc
+        if elapsed_rtc < 0: elapsed_rtc = elapsed_rtc + 86400
+        minutes: i32 = elapsed_rtc // 60
+        seconds: i32 = elapsed_rtc % 60
+        text(55, 16, 67, 0x0E); text(56, 16, 76, 0x0E); text(57, 16, 79, 0x0E); text(58, 16, 67, 0x0E); text(59, 16, 75, 0x0E)
+        text(61, 16, 48 + (minutes // 10) % 10, 0x0F); text(62, 16, 48 + minutes % 10, 0x0F); text(63, 16, 58, 0x0F)
+        text(64, 16, 48 + seconds // 10, 0x0F); text(65, 16, 48 + seconds % 10, 0x0F)
+    draw_achievement_popup()
     if game_over == 1:
         text(31, 8, 71, 0x0C); text(32, 8, 65, 0x0C)
         text(33, 8, 77, 0x0C); text(34, 8, 69, 0x0C)
@@ -397,8 +415,13 @@ def boot_screen() -> None:
         progress = progress + 1
     boot_wait(20)
 
+def finish_session() -> None:
+    if session_silent == 1: unlock_achievement(10)
+    if session_palette == 1 and session_lines >= 10: unlock_achievement(11)
+    if session_palette == 2 and score >= 1000: unlock_achievement(12)
+    fs_save_statistics()
 def reset_game() -> None:
-    global kind, rotation, piece_x, piece_y, next_kind, score, game_over, held_kind, hold_used, grounded, game_initialized, merge_count, game_over_drawn, bag_index, last_bag_kind, rng_state, current_combo
+    global kind, rotation, piece_x, piece_y, next_kind, score, game_over, held_kind, hold_used, grounded, game_initialized, merge_count, game_over_drawn, bag_index, last_bag_kind, rng_state, current_combo, session_lines, session_silent, session_palette, game_start_rtc
     index: i32 = 0
     while index < 240:
         board_set(index, 0)
@@ -418,6 +441,10 @@ def reset_game() -> None:
     grounded = 0
     merge_count = 0
     current_combo = 0
+    session_lines = 0
+    session_silent = 1 if bgm_volume == 0 and se_volume == 0 else 0
+    session_palette = color_mode
+    game_start_rtc = rtc_seconds_of_day()
     game_over_drawn = 0
     spawn()
     game_initialized = 1

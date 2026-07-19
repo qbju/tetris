@@ -1,5 +1,5 @@
 def kernel_main() -> None:
-    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period
+    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open
     vga_set_mode13()
     cell: i32 = 0
     while cell < 240:
@@ -16,6 +16,7 @@ def kernel_main() -> None:
         key: i32 = keyboard_scancode()
         if started == 1 and system_periods > stats_last_period:
             total_play_periods = total_play_periods + system_periods - stats_last_period
+            if total_play_periods >= 360000: unlock_achievement(6)
             stats_last_period = system_periods
         if key != 0:
             last_key = key
@@ -39,20 +40,26 @@ def kernel_main() -> None:
                     draw_settings()
                 elif menu_page == 2:
                     draw_reset_dialog()
-                else:
+                elif menu_page == 3:
                     draw_statistics()
+                elif menu_page == 4:
+                    draw_achievements()
+                else:
+                    draw_build_info()
                 menu_drawn = 1
                 debug_reset()
             elif debug_visible == 1 and menu_page == 0 and key != 0:
                 put_hex8(last_key, 48, 19)
 
             if menu_page == 0:
+                menu_count: i32 = 6 if (achievements & (1 << 13)) != 0 else 5
+                update_konami(key)
                 if key == 0x48:
-                    menu_selection = (menu_selection + 3) % 4
+                    menu_selection = (menu_selection + menu_count - 1) % menu_count
                     sound_tone(1808, 1)
                     menu_drawn = 0
                 elif key == 0x50:
-                    menu_selection = (menu_selection + 1) % 4
+                    menu_selection = (menu_selection + 1) % menu_count
                     sound_tone(1591, 1)
                     menu_drawn = 0
                 elif key == 0x1C:
@@ -78,8 +85,15 @@ def kernel_main() -> None:
                         menu_page = 2
                         reset_choice = 1
                         menu_drawn = 0
-                    else:
+                    elif menu_selection == 3:
                         menu_page = 3
+                        menu_drawn = 0
+                    elif menu_selection == 4:
+                        menu_page = 4
+                        achievement_page = 0
+                        menu_drawn = 0
+                    else:
+                        menu_page = 5
                         menu_drawn = 0
             elif menu_page == 1:
                 if key == 0x48:
@@ -92,15 +106,16 @@ def kernel_main() -> None:
                     direction: i32 = -1 if key == 0x4B else 1
                     if settings_page == 0:
                         if settings_selection == 0:
-                            color_mode = (color_mode + direction + 3) % 3
+                            cycle_color_mode(direction)
                             vga_set_palette(color_mode)
                         elif settings_selection == 1:
                             gravity_periods = gravity_periods + direction * 10
-                            if gravity_periods < 10: gravity_periods = 10
+                            minimum_gravity: i32 = 10 if normal_achievement_count() >= 9 else 40
+                            if gravity_periods < minimum_gravity: gravity_periods = minimum_gravity
                             if gravity_periods > 100: gravity_periods = 100
                         elif settings_selection == 2:
                             control_mode = 1 - control_mode
-                    else:
+                    elif settings_page == 1:
                         if settings_selection == 0:
                             bgm_volume = bgm_volume + direction
                             if bgm_volume < 0: bgm_volume = 0
@@ -112,23 +127,28 @@ def kernel_main() -> None:
                         elif settings_selection == 2:
                             debug_enabled = 1 - debug_enabled
                             if debug_enabled == 0: debug_visible = 0
+                    else:
+                        if settings_selection == 1 and (achievements & (1 << 12)) != 0:
+                            clock_enabled = 1 - clock_enabled
                     menu_drawn = 0
                 elif key == 0x1C:
                     if settings_selection < 3:
                         settings_selection = settings_selection + 1
                         menu_drawn = 0
-                    elif settings_page == 0:
-                        settings_page = 1
-                        settings_selection = 0
-                        menu_drawn = 0
                     else:
-                        fs_save_settings()
-                        settings_page = 0
-                        menu_page = 0
-                        menu_drawn = 0
+                        has_reward_page: i32 = 1 if (achievements & ((1 << 10) | (1 << 12))) != 0 else 0
+                        if settings_page == 0 or (settings_page == 1 and has_reward_page == 1):
+                            settings_page = settings_page + 1
+                            settings_selection = 0
+                            menu_drawn = 0
+                        else:
+                            fs_save_settings()
+                            settings_page = 0
+                            menu_page = 0
+                            menu_drawn = 0
                 elif key == 0x01:
-                    if settings_page == 1:
-                        settings_page = 0
+                    if settings_page > 0:
+                        settings_page = settings_page - 1
                         settings_selection = 0
                         menu_drawn = 0
                     else:
@@ -149,8 +169,31 @@ def kernel_main() -> None:
                 elif key == 0x01:
                     menu_page = 0
                     menu_drawn = 0
-            else:
+            elif menu_page == 3 or menu_page == 5:
                 if key == 0x1C or key == 0x01:
+                    menu_page = 0
+                    menu_drawn = 0
+            else:
+                if achievement_detail_open == 1:
+                    if key == 0x1C or key == 0x01:
+                        achievement_detail_open = 0
+                        menu_drawn = 0
+                elif key == 0x48:
+                    achievement_selection = (achievement_selection + 13) % 14
+                    achievement_page = achievement_selection // 7
+                    menu_drawn = 0
+                elif key == 0x50:
+                    achievement_selection = (achievement_selection + 1) % 14
+                    achievement_page = achievement_selection // 7
+                    menu_drawn = 0
+                elif key == 0x4B or key == 0x4D:
+                    achievement_page = 1 - achievement_page
+                    achievement_selection = achievement_page * 7
+                    menu_drawn = 0
+                elif key == 0x1C:
+                    achievement_detail_open = 1
+                    menu_drawn = 0
+                elif key == 0x01:
                     menu_page = 0
                     menu_drawn = 0
         elif game_over == 0:
@@ -160,7 +203,7 @@ def kernel_main() -> None:
             rotate_code: i32 = 0x48 if control_mode == 0 else 0x11
             if key == 0x01:
                 music_stop()
-                fs_save_statistics()
+                finish_session()
                 started = 0
                 menu_page = 0
                 menu_drawn = 0
@@ -218,7 +261,7 @@ def kernel_main() -> None:
             if game_over_drawn == 0:
                 music_stop()
                 fs_save_high_score(score)
-                fs_save_statistics()
+                finish_session()
                 sound_game_over()
                 draw_game_over()
                 game_over_drawn = 1
@@ -230,6 +273,12 @@ def kernel_main() -> None:
                 game_over_drawn = 0
                 arm_move_cooldown(15)
                 debug_reset()
+        if achievement_popup >= 0 and system_periods >= achievement_popup_until:
+            achievement_popup = -1
+            if started == 1 and game_over == 0:
+                draw()
+            else:
+                menu_drawn = 0
         if started == 1 and game_over == 0:
             if system_periods >= fps_deadline:
                 fps_value = fps_frames

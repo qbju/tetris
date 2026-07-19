@@ -161,17 +161,24 @@ def build() -> bytes:
     normal_palette = ((0,0,0),(0,0,42),(0,42,0),(0,42,42),(42,0,0),(42,0,42),(42,21,0),(42,42,42),(21,21,21),(21,21,63),(21,63,21),(21,63,63),(63,21,21),(63,21,63),(63,63,21),(63,63,63))
     gray_palette = tuple(((red * 3 + green * 6 + blue) // 10,) * 3 for red, green, blue in normal_palette)
     inverted_palette = tuple((63 - red, 63 - green, 63 - blue) for red, green, blue in normal_palette)
+    konami_palette = tuple((min(63, red + blue // 3), green // 4, 0 if colour < 8 else min(63, red + green)) for colour, (red, green, blue) in enumerate(normal_palette))
+    # Keep UI foreground entries white and UI background entries black in 01 mode.
+    binary_palette = tuple(((0, 0, 0) if colour < 7 else (63, 63, 63)) for colour in range(16))
     palette_fn = ir.Function(module, ir.FunctionType(void, [i32]), name="vga_set_palette")
     pb = ir.IRBuilder(palette_fn.append_basic_block("entry"))
     out(pb, 0x3C8, 0)
     is_gray = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 1))
     is_inverted = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 2))
+    is_konami = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 3))
+    is_binary = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 4))
     for colour_index in range(16):
         for component in range(3):
             normal_value = ir.Constant(i32, normal_palette[colour_index][component])
             gray_value = ir.Constant(i32, gray_palette[colour_index][component])
             inverted_value = ir.Constant(i32, inverted_palette[colour_index][component])
-            selected = pb.select(is_gray, gray_value, pb.select(is_inverted, inverted_value, normal_value))
+            konami_value = ir.Constant(i32, konami_palette[colour_index][component])
+            binary_value = ir.Constant(i32, binary_palette[colour_index][component])
+            selected = pb.select(is_gray, gray_value, pb.select(is_inverted, inverted_value, pb.select(is_konami, konami_value, pb.select(is_binary, binary_value, normal_value))))
             pb.call(io_out8, [ir.Constant(i32, 0x3C9), selected])
     pb.ret_void()
 

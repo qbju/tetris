@@ -2,3 +2,7 @@ build/
 __pycache__/
 *.pyc
 
+# Local TinyFS cheat utility (intentionally not published)
+tools/unlock_all_achievements.py
+*.img.bak
+run-tetris-os.bat
