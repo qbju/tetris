@@ -1,52 +1,65 @@
 # TETRIS OS
 
-LPythonでゲームロジックを書き、CPython + llvmliteでi386向けハードウェア境界を生成する、起動可能な32bit自作OSです。GRUB Multiboot2からベアメタルで起動し、QEMU上でテトリスを遊べます。
+LPythonでゲームロジックを書き、CPython + llvmliteでi386向けハードウェア境界と描画コードを生成する、起動可能な32bit自作OSです。GRUB Multiboot2からベアメタルで起動し、Pythonインタプリタや既存OSを使わずにテトリスを実行します。
 
-PythonインタプリタをOS上で動かしているわけではありません。LPythonのコードをネイティブコードへ変換し、仮想マシンやホストOSなしで実行しています。
+## 主な機能
 
-## 特徴
-
-- 10×20のテトリス盤面と4行の非表示スポーン領域
-- 7種類のテトリミノ、回転、ライン消去、スコア
-- NEXT／HOLD表示と色付きミノ
-- PITによる500msの自然落下、200msのロックディレイ
-- PS/2キーボード入力
-- 一時停止、ゲームオーバー演出、再スタート
-- テトリミノ風`TETRIS OS`起動画面
-- VGA Mode 13h（320×200・256色）のピクセルUI
-- 既存の80×25レイアウトを維持する4×8ピクセルフォント／ブロック描画
-- ATA PIOディスクドライバ
-- 独自TinyFSによるハイスコア・カラー・落下速度の永続保存
-- PLAY／SETTINGS／RESET DATAのホームメニュー
-- Shiftで切り替え可能なデバッグ表示
+- VGA Mode 13h（320×200、256色）のピクセルUI
+- 10×20の可視盤面と4行の非表示スポーン領域
+- 7種類のテトリミノ、回転、ライン消去、ロックディレイ
+- 7-bag方式（バッグ境界で同じミノが連続しない拡張）
+- 色付きのNEXT／HOLD表示
+- HOLDは何度でも交換可能
+- PITによる実時間ベースの落下・入力クールダウン
+- PCスピーカーによる効果音とコロブチカのループ再生
+- スコア、コンボ、歴代ハイスコア、最長コンボ
+- スクロール式PLAY／SETTINGS／RESET DATA／STATISTICSメニュー
+- 2ページ構成の設定画面
+- 通常色、グレースケール、反転パレット
+- 100ms単位の落下速度設定
+- 矢印キー／WASD操作の切り替え
+- BGM／SE音量（0〜10）
+- Shiftデバッグ機能の有効・無効
+- デバッグ欄の描画FPS表示
+- ゲームオーバー演出、一時停止、デバッグ表示
+- ATA PIOドライバと独自TinyFSによるデータ永続化
 
 ## 構成
 
 ```text
 boot/boot.S
-  Multiboot2ヘッダ、スタック初期化、main呼び出し
+  Multiboot2ヘッダ、スタック初期化、kernel_main呼び出しだけの最小ASM
 
 kernel/main.py
-  LPython製カーネル
-  ゲーム、描画制御、PS/2、PIT、ATA PIO、TinyFS
+  分割カーネルのビルドマニフェスト
+
+kernel/parts/
+  00_platform.inc.py    I/O、PIT、PCスピーカー、音楽
+  10_storage.inc.py     ATA PIO、TinyFS、永続レコード
+  20_state_menu.inc.py  状態、ホーム、設定、統計UI
+  30_game_render.inc.py 7-bag、盤面、ゲーム描画
+  40_entry.inc.py       メインループ、入力、状態遷移
+
+tools/gen_kernel_source.py
+  上記断片をbuild/kernel.pyへ結合
 
 tools/gen_hw_object.py
   CPython + llvmlite製ビルドツール
-  Mode 13h設定、ピクセルUI、作業バッファ、inb/outb/inw/outwをELF32へ生成
+  Mode 13h描画、バッファ、in/out関数をELF32オブジェクトとして生成
 
 storage/pythonos-data.img
-  QEMU用の4MiB永続ディスク（自動生成、Git管理外）
+  QEMU用4MiB永続ディスク
 ```
 
-手書きアセンブリは起動に必要な[boot/boot.S](boot/boot.S)だけです。`in`／`out`命令を含むハードウェア関数は、llvmliteのインラインASMから生成されます。Cソースは手書きせず、LPythonがビルド時に中間生成するものだけを使用します。
+ブート以外の手書きASMやCソースはありません。LPythonが生成したCと、llvmliteが生成したLLVMオブジェクトをリンクします。
 
 ## 必要なもの
 
 - Docker Desktop
 - Docker Compose
-- VNCクライアント
+- VNCクライアント（コンテナ版QEMUを使う場合）
 
-LPython、llvmlite、Clang、LLD、GRUB、QEMUなどはDockerイメージ内に導入されます。
+LPython、llvmlite、Clang、LLD、GRUB、QEMUなどのビルド環境はDockerイメージに含まれます。
 
 ## ビルド
 
@@ -63,20 +76,16 @@ build/kernel.elf
 storage/pythonos-data.img
 ```
 
-`storage/pythonos-data.img`は最初のビルド時だけ作られ、`make clean`では削除されません。
+`storage/pythonos-data.img`は存在しない場合だけ作成されます。`make -B`や`make clean`でも保存データを上書きしません。
 
-## QEMUをVNCで起動
+## QEMU + VNCで起動
 
 ```powershell
 docker rm -f pythonos-vnc
 docker compose run -d --service-ports --name pythonos-vnc osdev sh -c "qemu-system-i386 -boot d -cdrom build/pythonos.iso -drive file=storage/pythonos-data.img,format=raw,if=ide,index=0 -display none -vnc 0.0.0.0:0 -no-reboot -no-shutdown"
 ```
 
-VNCクライアントから次へ接続します。
-
-```text
-127.0.0.1:5900
-```
+VNCクライアントから `127.0.0.1:5900` へ接続します。VNCは音声を転送しません。
 
 停止：
 
@@ -84,70 +93,82 @@ VNCクライアントから次へ接続します。
 docker rm -f pythonos-vnc
 ```
 
+## Windowsで音声付き起動
+
+Windows版QEMUではDirectSoundへPCスピーカーを接続できます。
+
+```powershell
+qemu-system-i386 -boot d -cdrom build/pythonos.iso `
+  -drive file=storage/pythonos-data.img,format=raw,if=ide,index=0 `
+  -audiodev dsound,id=snd0 -machine pcspk-audiodev=snd0 `
+  -no-reboot -no-shutdown
+```
+
 ## 操作
 
 | キー | 動作 |
 |---|---|
-| Enter | メニュー決定／PLAY／ゲームオーバー画面からホームへ |
-| ← / → | ミノの左右移動／設定値変更／YES・NO選択 |
-| ↑ / ↓ | メニュー選択（ゲーム中は回転／ソフトドロップ） |
-
+| Enter | メニュー決定／ゲームオーバー画面からホームへ戻る |
+| ↑ / ↓ | メニュー選択／ゲーム中は回転・ソフトドロップ |
+| ← / → | 左右移動／設定値変更／確認ダイアログ選択 |
 | C | HOLD |
-| Esc | 一時停止してホームへ |
-| Shift | デバッグ表示のオン／オフ |
+| Esc | 一時停止してホームへ戻る |
+| Shift | 設定で許可されている場合、デバッグ表示を切り替える |
+
+## 統計画面
+
+ホームのRESET DATAで↓を押すとメニューがスクロールし、PLAYの代わりにSTATISTICSが表示されます。STATISTICSからさらに↓を押すとPLAYへ戻ります。
+
+STATISTICSでは、累計プレイ時間、累計消去ライン数、累計固定ミノ数を表示します。統計はTinyFSへ保存され、RESET DATAで初期化されます。
+## 設定画面
+
+設定は各ページ3項目とページ操作ボタンで構成されます。
+
+- 1ページ目：COLOR、GRAVITY、CONTROL、NEXT PAGE
+- 2ページ目：BGM VOL、SE VOL、DEBUG、SAVE BACK
+
+左右キーで値を変更します。通常の設定項目でEnterを押すと次の行へ進み、NEXT PAGEまたはSAVE BACK上でEnterを押すとページ移動／保存を実行します。
+## 7-bag
+
+0〜6の7種類をFisher–Yates法でシャッフルし、すべて取り出してから次のバッグを生成します。さらに、新しいバッグの先頭が直前のバッグの末尾と同じ場合は、新バッグ内の別要素と交換します。
+
+したがって各バッグに7種類が1個ずつ含まれる保証を維持しながら、`...7 | 7...` のような境界での同種連続を防ぎます。
 
 ## TinyFS
 
-QEMUへ接続したprimary-master IDEディスクを、LPython製ATA PIOドライバで読み書きします。未初期化ディスクは起動時にOS自身がTinyFSとしてフォーマットします。
+プライマリマスターIDEディスクをLPython製ATA PIOドライバで読み書きします。
 
-現在のTinyFSには以下があります。
+保存対象：
 
-- `PYFS`スーパーブロック
-- ルートディレクトリ
-- `HIGHSCORE`ファイル
-- `SETTINGS`ファイル（カラー・100ms単位の落下速度）
-- チェックサム付きレコード
-- 書き込み中断に備えた二重スロット
+- ハイスコア
+- 最長コンボ
+- カラーモード
+- 落下速度
+- 操作方式
+- BGM音量
+- SE音量
+- デバッグ機能の有効・無効
 
-ゲームオーバー時にハイスコアを保存し、設定画面のSAVE BACKまたはEscでカラーと落下速度を保存します。RESET DATAは確認ダイアログでYESを選んだ場合だけ両方を初期化します。
-
-保存ディスクを初期化する場合は、QEMUを停止してから`storage/pythonos-data.img`を削除し、再度`make`を実行してください。保存済みハイスコアは失われます。
+ハイスコア、設定、最長コンボはそれぞれ世代番号とチェックサムを持つ二重スロットへ書き込み、書き込み途中の中断に耐える設計です。RESET DATAではこれらをすべて初期化します。
 
 ## ビルドの流れ
 
 ```text
-kernel/main.py
-   │ LPython --show-c
-   ▼
-build/kernel.c
-   │ clang -target i386-elf
-   ▼
-build/kernel.o
+kernel/parts/*.inc.py ── 結合 ──> build/kernel.py ── LPython ──> build/kernel.c ── Clang ──> build/kernel.o
+tools/gen_hw_object.py ── CPython + llvmlite ──────────> build/hw.o
+boot/boot.S ── Clang ───────────────────────────────────> build/boot.o
 
- tools/gen_hw_object.py
-   │ CPython + llvmlite
-   ▼
- build/hw.o
-
- boot/boot.S ── clang ── build/boot.o
-
- build/boot.o + build/kernel.o + build/hw.o
-   │ ld.lld + linker.ld
-   ▼
-build/kernel.elf
-   │ grub-mkrescue
-   ▼
-build/pythonos.iso
+boot.o + kernel.o + hw.o ── LLD ──> kernel.elf ── GRUB ──> pythonos.iso
 ```
 
 ## 現在の制約
 
-- VGA Mode 13h（320×200・256色）専用
+- VGA Mode 13h専用
 - PS/2キーボードはポーリング方式
 - ATAはPIO方式
-- TinyFSは現在ハイスコアと設定保存に必要な最小構成
-- テトリミノ生成は簡易的で、公式の7-bag方式ではありません
+- PCスピーカーは1音のみで、VNCでは音声を聞けない
+- TinyFSはこのOSに必要な固定用途へ絞った最小構成
 
 ## ライセンス
 
-このプロジェクトは[MIT License](LICENSE)で公開されています。
+[MIT License](LICENSE)

@@ -3,6 +3,7 @@ KERNEL := $(BUILD)/kernel.elf
 ISO := $(BUILD)/pythonos.iso
 DATA := storage/pythonos-data.img
 LPYTHON_INC := /opt/conda/share/lpython/lib/impure
+KERNEL_PARTS := $(wildcard kernel/parts/*.inc.py)
 
 .PHONY: all run clean
 all: $(ISO) $(DATA)
@@ -14,13 +15,16 @@ $(BUILD):
 # primitive. This is deliberately a build-time tool, never part of the OS.
 $(DATA):
 	mkdir -p storage
-	truncate -s 4M $@
+	test -f $@ || truncate -s 4M $@
 $(BUILD)/hw.o: tools/gen_hw_object.py | $(BUILD)
 	python3 tools/gen_hw_object.py $@
 
-# LPython emits C; final image is a freestanding i386 Multiboot kernel.
-$(BUILD)/kernel.c: kernel/main.py | $(BUILD)
-	lpython --show-c kernel/main.py > $@
+# Amalgamate the maintainable source fragments, then let LPython emit C.
+$(BUILD)/kernel.py: tools/gen_kernel_source.py kernel/main.py $(KERNEL_PARTS) | $(BUILD)
+	python3 tools/gen_kernel_source.py $@
+
+$(BUILD)/kernel.c: $(BUILD)/kernel.py
+	lpython --show-c $< > $@
 
 $(BUILD)/kernel.o: $(BUILD)/kernel.c
 	clang -target i386-elf -ffreestanding -fno-stack-protector -fno-pic -I$(LPYTHON_INC) -c $< -o $@

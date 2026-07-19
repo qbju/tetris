@@ -104,6 +104,20 @@ def build() -> bytes:
     b.store(set_fn.args[1], b.gep(board, [c0, set_fn.args[0]], inbounds=True))
     b.ret_void()
 
+    # Keep the shuffled bag in an LLVM-owned global. This avoids relying on
+    # freestanding LPython global-array initialization.
+    bag_type = ir.ArrayType(i32, 7)
+    bag = ir.GlobalVariable(module, bag_type, name="tetris_bag")
+    bag.linkage = "internal"
+    bag.initializer = ir.Constant(bag_type, None)
+    get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="bag_get")
+    b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+    b.ret(b.load(b.gep(bag, [c0, get_fn.args[0]], inbounds=True)))
+    set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="bag_set")
+    b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+    b.store(set_fn.args[1], b.gep(bag, [c0, set_fn.args[0]], inbounds=True))
+    b.ret_void()
+
     buffer_type = ir.ArrayType(i32, 512)
     sector_buffer = ir.GlobalVariable(module, buffer_type, name="fs_sector_buffer")
     sector_buffer.linkage = "internal"
