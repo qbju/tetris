@@ -25,6 +25,14 @@ game_initialized: i32 = 0
 game_over_drawn: i32 = 0
 merge_count: i32 = 0
 current_combo: i32 = 0
+game_mode: i32 = 0  # 0 = ENDLESS, 1 = MARATHON 150, 2 = SPRINT 40
+sprint_lines: i32 = 0
+sprint_start_period: i32 = 0
+sprint_elapsed_periods: i32 = 0
+session_hold_used: i32 = 0
+last_action_rotation: i32 = 0
+session_tspins: i32 = 0
+survivor_start_period: i32 = 0
 debug_filled: i32 = -1
 debug_started: i32 = -1
 debug_game_over: i32 = -1
@@ -167,6 +175,50 @@ def achievement_chunk(identifier: i32, group: i32) -> i32:
         if group == 0: return 1330662729
         if group == 1: return 1112101715
         if group == 2: return 17740
+    elif identifier == 14:
+        if group == 0: return 1397901638
+        if group == 1: return 1313153108
+        if group == 2: return 1397050436
+        if group == 3: return 83
+    elif identifier == 15:
+        if group == 0: return 1397901638
+        if group == 1: return 1095573588
+        if group == 2: return 1213481298
+        if group == 3: return 20047
+    elif identifier == 16:
+        if group == 0: return 1397901638
+        if group == 1: return 1347625044
+        if group == 2: return 1414416722
+    elif identifier == 17:
+        if group == 0: return 1330138958
+        if group == 1: return 1293960268
+        if group == 2: return 1413567041
+        if group == 3: return 5132104
+    elif identifier == 18:
+        if group == 0: return 1330138958
+        if group == 1: return 1394623564
+        if group == 2: return 1313428048
+        if group == 3: return 84
+    elif identifier == 19:
+        if group == 0: return 1179796816
+        if group == 1: return 542393157
+        if group == 2: return 1128354899
+        if group == 3: return 75
+    elif identifier == 20:
+        if group == 0: return 1397704775
+        if group == 1: return 1397050452
+        if group == 2: return 83
+    elif identifier == 21:
+        if group == 0: return 1448236371
+        if group == 1: return 1380931145
+    elif identifier == 22:
+        if group == 0: return 1347628372
+        if group == 1: return 1380273737
+    elif identifier == 23:
+        if group == 0: return 1347628372
+        if group == 1: return 1293962825
+        if group == 2: return 1163154241
+        if group == 3: return 82
     return 0
 def draw_achievement_title(identifier: i32, x: i32, y: i32, colour: i32) -> None:
     position: i32 = 0
@@ -293,6 +345,77 @@ def achievement_description_chunk(identifier: i32, group: i32) -> i32:
         if group == 4: return 1430397006
         if group == 5: return 541346889
         if group == 6: return 1195461702
+    elif identifier == 14:
+        if group == 0: return 1380013139
+        if group == 1: return 1313153108
+        if group == 2: return 1397050436
+        if group == 3: return 1330454611
+        if group == 4: return 17732
+    elif identifier == 15:
+        if group == 0: return 1380013139
+        if group == 1: return 1095573588
+        if group == 2: return 1213481298
+        if group == 3: return 1293962831
+        if group == 4: return 4539471
+    elif identifier == 16:
+        if group == 0: return 1380013139
+        if group == 1: return 1347625044
+        if group == 2: return 1414416722
+        if group == 3: return 540029984
+        if group == 4: return 1162104653
+    elif identifier == 17:
+        if group == 0: return 1229867334
+        if group == 1: return 1293961299
+        if group == 2: return 1413567041
+        if group == 3: return 542003016
+        if group == 4: return 1213483351
+        if group == 5: return 542397775
+        if group == 6: return 1145851720
+    elif identifier == 18:
+        if group == 0: return 1229867334
+        if group == 1: return 1394624595
+        if group == 2: return 1313428048
+        if group == 3: return 1230446676
+        if group == 4: return 1431259220
+        if group == 5: return 1330126932
+        if group == 6: return 17484
+    elif identifier == 19:
+        if group == 0: return 1095060547
+        if group == 1: return 1213472850
+        if group == 2: return 1313153093
+        if group == 3: return 1163020628
+        if group == 4: return 1095713312
+        if group == 5: return 17490
+    elif identifier == 20:
+        if group == 0: return 1380926291
+        if group == 1: return 1448026181
+        if group == 2: return 824201797
+        if group == 3: return 540028976
+        if group == 4: return 1213483351
+        if group == 5: return 1330136864
+        if group == 6: return 1327518803
+        if group == 7: return 17990
+    elif identifier == 21:
+        if group == 0: return 1448236371
+        if group == 1: return 541414985
+        if group == 2: return 1229791285
+        if group == 3: return 1413554254
+        if group == 4: return 808465184
+        if group == 5: return 1327518541
+        if group == 6: return 1162616914
+        if group == 7: return 21331
+    elif identifier == 22:
+        if group == 0: return 1179796816
+        if group == 1: return 541938255
+        if group == 2: return 541412943
+        if group == 3: return 1347628372
+        if group == 4: return 20041
+    elif identifier == 23:
+        if group == 0: return 1179796816
+        if group == 1: return 541938255
+        if group == 2: return 1163282758
+        if group == 3: return 1395479584
+        if group == 4: return 1397639504
     return 0
 
 def draw_achievement_detail() -> None:
@@ -314,7 +437,7 @@ def draw_achievement_detail() -> None:
     ui_put_cell(12, 5, 201, 0x5F); ui_put_cell(67, 5, 187, 0x5F)
     ui_put_cell(12, 19, 200, 0x5F); ui_put_cell(67, 19, 188, 0x5F)
     unlocked: i32 = 1 if (achievements & (1 << achievement_selection)) != 0 else 0
-    if achievement_selection >= 9 and unlocked == 0:
+    if achievement_selection >= 9 and achievement_selection <= 13 and unlocked == 0:
         text(31, 8, 72, 0x58); text(32, 8, 73, 0x58); text(33, 8, 68, 0x58); text(34, 8, 68, 0x58); text(35, 8, 69, 0x58); text(36, 8, 78, 0x58)
         # UNLOCK TO REVEAL DETAILS
         hidden_message: i32 = 0
@@ -348,13 +471,13 @@ def draw_achievements() -> None:
         y = y + 1
     start: i32 = achievement_page * 7
     index: i32 = 0
-    while index < 7:
+    while index < 7 and start + index < 24:
         identifier: i32 = start + index
         row: i32 = 6 + index * 2
         unlocked: i32 = 1 if (achievements & (1 << identifier)) != 0 else 0
         text(15, row, 16 if identifier == achievement_selection else 32, 0x5E)
         text(17, row, 43 if unlocked == 1 else 45, 0x5A if unlocked == 1 else 0x58)
-        if identifier >= 9 and unlocked == 0:
+        if identifier >= 9 and identifier <= 13 and unlocked == 0:
             text(21, row, 72, 0x58); text(22, row, 73, 0x58); text(23, row, 68, 0x58); text(24, row, 68, 0x58); text(25, row, 69, 0x58); text(26, row, 78, 0x58)
         else:
             draw_achievement_title(identifier, 21, row, 0x5F if unlocked == 1 else 0x57)
@@ -402,7 +525,15 @@ def draw_build_info() -> None:
 def draw_menu_label(item: i32, y: i32) -> None:
     colour: i32 = 0x2F if menu_selection == item else 0x1F
     if item == 0:
-        text(37, y, 80, colour); text(38, y, 76, colour); text(39, y, 65, colour); text(40, y, 89, colour)
+        text(31, y, 80, colour); text(32, y, 76, colour); text(33, y, 65, colour); text(34, y, 89, colour)
+        text(36, y, 60, colour)
+        if game_mode == 0:
+            text(37, y, 69, colour); text(38, y, 78, colour); text(39, y, 68, colour); text(40, y, 76, colour); text(41, y, 69, colour); text(42, y, 83, colour); text(43, y, 83, colour)
+            text(44, y, 62, colour)
+        elif game_mode == 1:
+            text(36, y, 60, colour); text(37, y, 77, colour); text(38, y, 65, colour); text(39, y, 82, colour); text(40, y, 65, colour); text(41, y, 84, colour); text(42, y, 72, colour); text(43, y, 79, colour); text(44, y, 78, colour); text(45, y, 62, colour)
+        else:
+            text(36, y, 60, colour); text(37, y, 83, colour); text(38, y, 80, colour); text(39, y, 82, colour); text(40, y, 73, colour); text(41, y, 78, colour); text(42, y, 84, colour); text(43, y, 32, colour); text(44, y, 52, colour); text(45, y, 48, colour); text(46, y, 62, colour)
     elif item == 1:
         text(35, y, 83, colour); text(36, y, 69, colour); text(37, y, 84, colour); text(38, y, 84, colour); text(39, y, 73, colour); text(40, y, 78, colour); text(41, y, 71, colour); text(42, y, 83, colour)
     elif item == 2:
@@ -434,12 +565,13 @@ def draw_menu() -> None:
 def cycle_color_mode(direction: i32) -> None:
     global color_mode
     attempts: i32 = 0
-    while attempts < 5:
-        color_mode = (color_mode + direction + 5) % 5
+    while attempts < 6:
+        color_mode = (color_mode + direction + 6) % 6
         allowed: i32 = 1 if color_mode == 0 or color_mode == 2 else 0
         if color_mode == 1 and normal_achievement_count() >= 5: allowed = 1
         if color_mode == 3 and (achievements & (1 << 9)) != 0: allowed = 1
         if color_mode == 4 and (achievements & (1 << 11)) != 0: allowed = 1
+        if color_mode == 5 and non_hidden_achievement_count() >= 14: allowed = 1
         if allowed == 1: return
         attempts = attempts + 1
     color_mode = 0
@@ -450,7 +582,7 @@ def draw_setting_value(value: i32, x: i32, y: i32) -> None:
 def draw_settings() -> None:
     draw_menu_shell(1)
     text(34, 4, 80, 0x0E); text(35, 4, 65, 0x0E); text(36, 4, 71, 0x0E); text(37, 4, 69, 0x0E)
-    text(39, 4, 49 + settings_page, 0x0F); text(40, 4, 47, 0x07); text(41, 4, 51 if ((achievements & ((1 << 10) | (1 << 12))) != 0) else 50, 0x0F)
+    text(39, 4, 49 + settings_page, 0x0F); text(40, 4, 47, 0x07); text(41, 4, 51, 0x0F)
     cursor_y: i32 = 6 + settings_selection * 3 if settings_selection < 3 else 17
     text(20, cursor_y, 16, 0x0E)
     if settings_page == 0:
@@ -464,8 +596,10 @@ def draw_settings() -> None:
             text(40, 6, 73, 0x0F); text(41, 6, 78, 0x0F); text(42, 6, 86, 0x0F); text(43, 6, 69, 0x0F); text(44, 6, 82, 0x0F); text(45, 6, 84, 0x0F)
         elif color_mode == 3:
             text(40, 6, 75, 0x0F); text(41, 6, 79, 0x0F); text(42, 6, 78, 0x0F); text(43, 6, 65, 0x0F); text(44, 6, 77, 0x0F); text(45, 6, 73, 0x0F)
-        else:
+        elif color_mode == 4:
             text(43, 6, 48, 0x0F); text(44, 6, 49, 0x0F)
+        else:
+            text(40, 6, 71, 0x0F); text(41, 6, 79, 0x0F); text(42, 6, 76, 0x0F); text(43, 6, 68, 0x0F); text(44, 6, 69, 0x0F); text(45, 6, 78, 0x0F)
         # GRAVITY
         text(24, 9, 71, 0x0B); text(25, 9, 82, 0x0B); text(26, 9, 65, 0x0B); text(27, 9, 86, 0x0B); text(28, 9, 73, 0x0B); text(29, 9, 84, 0x0B); text(30, 9, 89, 0x0B)
         put_number(gravity_periods * 10, 41, 9); text(47, 9, 77, 0x07); text(48, 9, 83, 0x07)
@@ -492,10 +626,16 @@ def draw_settings() -> None:
     else:
         # Achievement reward settings page.
         text(24, 6, 77, 0x0B); text(25, 6, 85, 0x0B); text(26, 6, 83, 0x0B); text(27, 6, 73, 0x0B); text(28, 6, 67, 0x0B)
-        if (achievements & (1 << 10)) != 0:
+        if music_mode == 0:
             text(37, 6, 75, 0x0F); text(38, 6, 79, 0x0F); text(39, 6, 82, 0x0F); text(40, 6, 79, 0x0F); text(41, 6, 66, 0x0F); text(42, 6, 69, 0x0F); text(43, 6, 73, 0x0F); text(44, 6, 78, 0x0F); text(45, 6, 73, 0x0F); text(46, 6, 75, 0x0F); text(47, 6, 73, 0x0F)
+        elif music_mode == 1:
+            text(39, 6, 75, 0x0F); text(40, 6, 65, 0x0F); text(41, 6, 76, 0x0F); text(42, 6, 73, 0x0F); text(43, 6, 78, 0x0F); text(44, 6, 75, 0x0F); text(45, 6, 65, 0x0F)
         else:
-            text(41, 6, 76, 0x08); text(42, 6, 79, 0x08); text(43, 6, 67, 0x08); text(44, 6, 75, 0x08); text(45, 6, 69, 0x08); text(46, 6, 68, 0x08)
+            music_name_x: i32 = 48 - music_name_length
+            music_name_index: i32 = 0
+            while music_name_index < music_name_length:
+                text(music_name_x + music_name_index, 6, any_name_get(music_name_index), 0x0E)
+                music_name_index = music_name_index + 1
         text(24, 9, 67, 0x0B); text(25, 9, 76, 0x0B); text(26, 9, 79, 0x0B); text(27, 9, 67, 0x0B); text(28, 9, 75, 0x0B)
         if (achievements & (1 << 12)) != 0:
             if clock_enabled == 1:
@@ -504,14 +644,17 @@ def draw_settings() -> None:
                 text(43, 9, 79, 0x08); text(44, 9, 70, 0x08); text(45, 9, 70, 0x08)
         else:
             text(41, 9, 76, 0x08); text(42, 9, 79, 0x08); text(43, 9, 67, 0x08); text(44, 9, 75, 0x08); text(45, 9, 69, 0x08); text(46, 9, 68, 0x08)
-        text(24, 12, 82, 0x0B); text(25, 12, 69, 0x0B); text(26, 12, 87, 0x0B); text(27, 12, 65, 0x0B); text(28, 12, 82, 0x0B); text(29, 12, 68, 0x0B); text(30, 12, 83, 0x0B)
-        text(40, 12, 65, 0x0F); text(41, 12, 67, 0x0F); text(42, 12, 84, 0x0F); text(43, 12, 73, 0x0F); text(44, 12, 86, 0x0F); text(45, 12, 69, 0x0F)
+        text(24, 12, 71, 0x0B); text(25, 12, 72, 0x0B); text(26, 12, 79, 0x0B); text(27, 12, 83, 0x0B); text(28, 12, 84, 0x0B)
+        if ghost_enabled == 1:
+            text(44, 12, 79, 0x0F); text(45, 12, 78, 0x0F)
+        else:
+            text(43, 12, 79, 0x08); text(44, 12, 70, 0x08); text(45, 12, 70, 0x08)
         text(34, 17, 83, 0x0A); text(35, 17, 65, 0x0A); text(36, 17, 86, 0x0A); text(37, 17, 69, 0x0A); text(39, 17, 66, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 67, 0x0A); text(42, 17, 75, 0x0A)
     footer_x: i32 = 30
     while footer_x < 50:
         ui_put_cell(footer_x, 17, 32, 0x10)
         footer_x = footer_x + 1
-    has_reward_page: i32 = 1 if (achievements & ((1 << 10) | (1 << 12))) != 0 else 0
+    has_reward_page: i32 = 1
     if settings_page == 0 or (settings_page == 1 and has_reward_page == 1):
         text(34, 17, 78, 0x0A); text(35, 17, 69, 0x0A); text(36, 17, 88, 0x0A); text(37, 17, 84, 0x0A)
         text(39, 17, 80, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 71, 0x0A); text(42, 17, 69, 0x0A)
@@ -520,6 +663,81 @@ def draw_settings() -> None:
         text(39, 17, 66, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 67, 0x0A); text(42, 17, 75, 0x0A)
     text(25, 21, 85, 0x07); text(26, 21, 80, 0x07); text(28, 21, 68, 0x07); text(29, 21, 79, 0x07); text(30, 21, 87, 0x07)
     text(33, 21, 76, 0x07); text(34, 21, 69, 0x07); text(35, 21, 70, 0x07); text(36, 21, 84, 0x07); text(38, 21, 82, 0x07); text(39, 21, 73, 0x07); text(40, 21, 71, 0x07); text(41, 21, 72, 0x07); text(42, 21, 84, 0x07)
+def scancode_ascii(key: i32) -> i32:
+    if key == 0x1E: return 65
+    if key == 0x30: return 66
+    if key == 0x2E: return 67
+    if key == 0x20: return 68
+    if key == 0x12: return 69
+    if key == 0x21: return 70
+    if key == 0x22: return 71
+    if key == 0x23: return 72
+    if key == 0x17: return 73
+    if key == 0x24: return 74
+    if key == 0x25: return 75
+    if key == 0x26: return 76
+    if key == 0x32: return 77
+    if key == 0x31: return 78
+    if key == 0x18: return 79
+    if key == 0x19: return 80
+    if key == 0x10: return 81
+    if key == 0x13: return 82
+    if key == 0x1F: return 83
+    if key == 0x14: return 84
+    if key == 0x16: return 85
+    if key == 0x2F: return 86
+    if key == 0x11: return 87
+    if key == 0x2D: return 88
+    if key == 0x15: return 89
+    if key == 0x2C: return 90
+    if key >= 0x02 and key <= 0x0A: return 48 + key - 1
+    if key == 0x0B: return 48
+    return 0
+def draw_music_editor() -> None:
+    clear_screen(0x10)
+    name_index: i32 = 0
+    while name_index < music_name_length:
+        text(28 + name_index, 2, any_name_get(name_index), 0x0E)
+        name_index = name_index + 1
+    if music_name_editing == 1:
+        text(28 + music_name_length, 2, 95, 0x0E)
+    text(34, 2, 77, 0x0B); text(35, 2, 85, 0x0B); text(36, 2, 83, 0x0B); text(37, 2, 73, 0x0B); text(38, 2, 67, 0x0B)
+    text(40, 2, 69, 0x0B); text(41, 2, 68, 0x0B); text(42, 2, 73, 0x0B); text(43, 2, 84, 0x0B); text(44, 2, 79, 0x0B); text(45, 2, 82, 0x0B)
+    staff_y: i32 = 8
+    while staff_y <= 16:
+        staff_x: i32 = 7
+        while staff_x < 73:
+            ui_put_cell(staff_x, staff_y, 196, 0x17)
+            staff_x = staff_x + 1
+        staff_y = staff_y + 2
+    note_index: i32 = 0
+    while note_index < 32:
+        packed_note: i32 = any_note_get(note_index)
+        pitch: i32 = divisor_pitch(packed_note & 0xFFFF)
+        note_y: i32 = 17 - pitch
+        note_x: i32 = 8 + note_index * 2
+        note_colour: i32 = 0x0E if note_index == music_editor_note else 0x0F
+        note_duration: i32 = (packed_note >> 16) & 0xFFFF
+        if (note_duration & 0x8000) == 0: ui_put_cell(note_x, note_y, 14, note_colour)
+        if note_index == music_editor_note: ui_put_cell(note_x, 19, 30, 0x0E)
+        note_index = note_index + 1
+    text(8, 21, 65, 0x0B); text(9, 21, 82, 0x0B); text(10, 21, 82, 0x0B); text(11, 21, 79, 0x0B); text(12, 21, 87, 0x0B); text(13, 21, 83, 0x0B)
+    text(15, 21, 77, 0x07); text(16, 21, 79, 0x07); text(17, 21, 86, 0x07); text(18, 21, 69, 0x07)
+    text(21, 21, 69, 0x0A); text(22, 21, 78, 0x0A); text(23, 21, 84, 0x0A); text(24, 21, 69, 0x0A); text(25, 21, 82, 0x0A); text(27, 21, 83, 0x0A); text(28, 21, 65, 0x0A); text(29, 21, 86, 0x0A); text(30, 21, 69, 0x0A)
+    text(33, 21, 69, 0x0C); text(34, 21, 83, 0x0C); text(35, 21, 67, 0x0C); text(37, 21, 67, 0x07); text(38, 21, 65, 0x07); text(39, 21, 78, 0x07); text(40, 21, 67, 0x07); text(41, 21, 69, 0x07); text(42, 21, 76, 0x07)
+    text(45, 21, 82, 0x0E); text(47, 21, 82, 0x07); text(48, 21, 69, 0x07); text(49, 21, 83, 0x07); text(50, 21, 69, 0x07); text(51, 21, 84, 0x07)
+    text(54, 21, 83, 0x0E); text(56, 21, 76, 0x07); text(57, 21, 73, 0x07); text(58, 21, 83, 0x07); text(59, 21, 84, 0x07); text(60, 21, 69, 0x07); text(61, 21, 78, 0x07)
+    text(64, 21, 78, 0x0E); text(66, 21, 78, 0x07); text(67, 21, 65, 0x07); text(68, 21, 77, 0x07); text(69, 21, 69, 0x07)
+    text(8, 23, 49, 0x0E); text(10, 23, 76, 0x07); text(11, 23, 79, 0x07); text(12, 23, 78, 0x07); text(13, 23, 71, 0x07)
+    text(17, 23, 50, 0x0E); text(19, 23, 77, 0x07); text(20, 23, 73, 0x07); text(21, 23, 68, 0x07)
+    text(25, 23, 51, 0x0E); text(27, 23, 83, 0x07); text(28, 23, 72, 0x07); text(29, 23, 79, 0x07); text(30, 23, 82, 0x07); text(31, 23, 84, 0x07)
+    text(35, 23, 52, 0x0E); text(37, 23, 82, 0x07); text(38, 23, 69, 0x07); text(39, 23, 83, 0x07); text(40, 23, 84, 0x07)
+    selected_duration: i32 = (any_note_get(music_editor_note) >> 16) & 0xFFFF
+    selected_kind: i32 = 49
+    if (selected_duration & 0x8000) != 0: selected_kind = 52
+    elif selected_duration <= 20: selected_kind = 51
+    elif selected_duration <= 40: selected_kind = 50
+    text(68, 23, 68, 0x07); text(69, 23, 85, 0x07); text(70, 23, 82, 0x07); text(71, 23, 58, 0x07); text(72, 23, selected_kind, 0x0E)
 def draw_reset_dialog() -> None:
     draw_menu()
     y: i32 = 7

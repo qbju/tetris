@@ -107,7 +107,9 @@ def fs_format() -> bool:
     if not ata_write_sector(12):
         return False
     fs_buffer_clear()
-    return ata_write_sector(13)
+    if not ata_write_sector(13): return False
+    fs_buffer_clear()
+    return ata_write_sector(14)
 
 
 def score_record_valid(offset: i32) -> bool:
@@ -164,10 +166,10 @@ def settings_record_valid(offset: i32) -> bool:
     saved_clock: i32 = fs_get_u32(offset + 36)
     checksum: i32 = generation ^ saved_colour ^ saved_gravity ^ saved_control ^ saved_bgm ^ saved_se ^ saved_debug ^ 0x53545447
     if saved_clock >= 256: checksum = checksum ^ saved_clock
-    return fs_get_u32(offset + 32) == checksum and (saved_clock == 0 or saved_clock == 256 or saved_clock == 257) and saved_colour >= 0 and saved_colour <= 4 and saved_gravity >= 10 and saved_gravity <= 100 and saved_control >= 0 and saved_control <= 1 and saved_bgm >= 0 and saved_bgm <= 10 and saved_se >= 0 and saved_se <= 10 and saved_debug >= 0 and saved_debug <= 1
+    return fs_get_u32(offset + 32) == checksum and (saved_clock == 0 or saved_clock == 256 or saved_clock == 257 or (saved_clock >= 512 and saved_clock <= 515) or (saved_clock >= 1024 and saved_clock <= 1039)) and saved_colour >= 0 and saved_colour <= 5 and saved_gravity >= 10 and saved_gravity <= 100 and saved_control >= 0 and saved_control <= 1 and saved_bgm >= 0 and saved_bgm <= 10 and saved_se >= 0 and saved_se <= 10 and saved_debug >= 0 and saved_debug <= 1
 
 def fs_load_settings() -> None:
-    global color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, settings_generation, settings_slot
+    global color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, music_mode, settings_generation, settings_slot
     color_mode = 0
     gravity_periods = 50
     control_mode = 0
@@ -175,6 +177,8 @@ def fs_load_settings() -> None:
     se_volume = 5
     debug_enabled = 1
     clock_enabled = 1
+    ghost_enabled = 1
+    music_mode = 0
     settings_generation = 0
     settings_slot = 0
     if not ata_read_sector(9):
@@ -199,7 +203,20 @@ def fs_load_settings() -> None:
     se_volume = fs_get_u32(offset + 24)
     debug_enabled = fs_get_u32(offset + 28)
     saved_clock: i32 = fs_get_u32(offset + 36)
-    clock_enabled = saved_clock - 256 if saved_clock >= 256 else 1
+    if saved_clock >= 1024:
+        packed_options: i32 = saved_clock - 1024
+        clock_enabled = packed_options & 1
+        ghost_enabled = (packed_options >> 1) & 1
+        music_mode = (packed_options >> 2) & 3
+    elif saved_clock >= 512:
+        packed_options = saved_clock - 512
+        clock_enabled = packed_options & 1
+        ghost_enabled = (packed_options >> 1) & 1
+        music_mode = 0
+    else:
+        clock_enabled = saved_clock - 256 if saved_clock >= 256 else 1
+        ghost_enabled = 1
+        music_mode = 0
 
 def fs_save_settings() -> None:
     global settings_generation, settings_slot
@@ -208,7 +225,7 @@ def fs_save_settings() -> None:
     new_slot: i32 = 0 if settings_slot == 1 else 1
     offset: i32 = new_slot * 40
     generation: i32 = settings_generation + 1
-    saved_clock: i32 = 256 + clock_enabled
+    saved_clock: i32 = 1024 + clock_enabled + ghost_enabled * 2 + music_mode * 4
     checksum: i32 = generation ^ color_mode ^ gravity_periods ^ control_mode ^ bgm_volume ^ se_volume ^ debug_enabled ^ saved_clock ^ 0x53545447
     fs_buffer_set(offset, 83); fs_buffer_set(offset + 1, 84)
     fs_buffer_set(offset + 2, 2); fs_buffer_set(offset + 3, 0)
@@ -225,7 +242,7 @@ def fs_save_settings() -> None:
         settings_generation = generation
         settings_slot = new_slot
 def fs_reset_data() -> None:
-    global high_score, high_generation, high_slot, color_mode, gravity_periods, settings_generation, settings_slot, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, max_combo, combo_generation, combo_slot, total_play_periods, total_lines, total_pieces, stats_generation, stats_slot, achievements, achievement_generation, achievement_slot
+    global high_score, high_generation, high_slot, color_mode, gravity_periods, settings_generation, settings_slot, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, music_mode, max_combo, combo_generation, combo_slot, total_play_periods, total_lines, total_pieces, stats_generation, stats_slot, achievements, achievement_generation, achievement_slot
     high_score = 0
     high_generation = 0
     high_slot = 0
@@ -236,6 +253,8 @@ def fs_reset_data() -> None:
     se_volume = 5
     debug_enabled = 1
     clock_enabled = 1
+    ghost_enabled = 1
+    music_mode = 0
     settings_generation = 0
     settings_slot = 0
     max_combo = 0
@@ -262,6 +281,79 @@ def fs_reset_data() -> None:
     fs_buffer_clear()
     ata_write_sector(13)
 
+def any_music_record_valid(offset: i32) -> bool:
+    if fs_buffer_get(offset) != 65 or fs_buffer_get(offset + 1) != 77: return False
+    generation: i32 = fs_get_u32(offset + 4)
+    checksum: i32 = generation ^ 0x414E594D
+    index: i32 = 0
+    while index < 32:
+        checksum = checksum ^ fs_get_u32(offset + 8 + index * 4)
+        index = index + 1
+    index = 0
+    while index < 8:
+        checksum = checksum ^ fs_buffer_get(offset + 136 + index)
+        index = index + 1
+    return fs_get_u32(offset + 144) == checksum
+
+def fs_load_any_music() -> None:
+    global any_music_generation, any_music_slot, music_name_length
+    any_music_generation = 0
+    any_music_slot = 0
+    if not ata_read_sector(14):
+        any_music_reset()
+        return
+    valid_a: bool = any_music_record_valid(0)
+    valid_b: bool = any_music_record_valid(160)
+    generation_a: i32 = fs_get_u32(4) if valid_a else -1
+    generation_b: i32 = fs_get_u32(164) if valid_b else -1
+    offset: i32 = 0
+    if valid_b and generation_b > generation_a:
+        offset = 160
+        any_music_slot = 1
+        any_music_generation = generation_b
+    elif valid_a:
+        any_music_generation = generation_a
+    else:
+        any_music_reset()
+        return
+    index: i32 = 0
+    while index < 32:
+        any_note_set(index, fs_get_u32(offset + 8 + index * 4))
+        index = index + 1
+    music_name_length = 0
+    while music_name_length < 8 and fs_buffer_get(offset + 136 + music_name_length) != 0:
+        any_name_set(music_name_length, fs_buffer_get(offset + 136 + music_name_length))
+        music_name_length = music_name_length + 1
+    index = music_name_length
+    while index < 8:
+        any_name_set(index, 0)
+        index = index + 1
+
+def fs_save_any_music() -> None:
+    global any_music_generation, any_music_slot
+    if fs_ready == 0 or not ata_read_sector(14): return
+    new_slot: i32 = 0 if any_music_slot == 1 else 1
+    offset: i32 = new_slot * 160
+    generation: i32 = any_music_generation + 1
+    checksum: i32 = generation ^ 0x414E594D
+    fs_buffer_set(offset, 65); fs_buffer_set(offset + 1, 77); fs_buffer_set(offset + 2, 1); fs_buffer_set(offset + 3, 0)
+    fs_put_u32(offset + 4, generation)
+    index: i32 = 0
+    while index < 32:
+        packed_note: i32 = any_note_get(index)
+        fs_put_u32(offset + 8 + index * 4, packed_note)
+        checksum = checksum ^ packed_note
+        index = index + 1
+    index = 0
+    while index < 8:
+        name_character: i32 = any_name_get(index)
+        fs_buffer_set(offset + 136 + index, name_character)
+        checksum = checksum ^ name_character
+        index = index + 1
+    fs_put_u32(offset + 144, checksum)
+    if ata_write_sector(14):
+        any_music_generation = generation
+        any_music_slot = new_slot
 def fs_mount() -> None:
     global fs_ready
     fs_ready = 0
@@ -278,6 +370,7 @@ def fs_mount() -> None:
     fs_load_max_combo()
     fs_load_statistics()
     fs_load_achievements()
+    fs_load_any_music()
     if impossible_enabled == 1: unlock_achievement(13)
 
 
@@ -345,6 +438,14 @@ def normal_achievement_count() -> i32:
     while index < 9:
         if (achievements & (1 << index)) != 0: count = count + 1
         index = index + 1
+    return count
+def non_hidden_achievement_count() -> i32:
+    count: i32 = 0
+    identifier: i32 = 0
+    while identifier < 24:
+        if (identifier < 9 or identifier > 13) and (achievements & (1 << identifier)) != 0:
+            count = count + 1
+        identifier = identifier + 1
     return count
 def stats_record_valid(offset: i32) -> bool:
     if fs_buffer_get(offset) != 83 or fs_buffer_get(offset + 1) != 80:

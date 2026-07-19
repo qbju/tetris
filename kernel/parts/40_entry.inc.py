@@ -1,5 +1,5 @@
 def kernel_main() -> None:
-    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open
+    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length
     vga_set_mode13()
     cell: i32 = 0
     while cell < 240:
@@ -18,6 +18,8 @@ def kernel_main() -> None:
             total_play_periods = total_play_periods + system_periods - stats_last_period
             if total_play_periods >= 360000: unlock_achievement(6)
             stats_last_period = system_periods
+        if started == 1 and game_over == 0 and gravity_periods <= 30 and system_periods - survivor_start_period >= 30000:
+            unlock_achievement(21)
         if key != 0:
             last_key = key
         if debug_enabled == 1 and (key == 0x2A or key == 0x36):
@@ -44,8 +46,10 @@ def kernel_main() -> None:
                     draw_statistics()
                 elif menu_page == 4:
                     draw_achievements()
-                else:
+                elif menu_page == 5:
                     draw_build_info()
+                else:
+                    draw_music_editor()
                 menu_drawn = 1
                 debug_reset()
             elif debug_visible == 1 and menu_page == 0 and key != 0:
@@ -62,6 +66,11 @@ def kernel_main() -> None:
                     menu_selection = (menu_selection + 1) % menu_count
                     sound_tone(1591, 1)
                     menu_drawn = 0
+                elif (key == 0x4B or key == 0x4D) and menu_selection == 0:
+                    game_mode = (game_mode + (2 if key == 0x4B else 1)) % 3
+                    game_initialized = 0
+                    sound_tone(1591, 1)
+                    menu_drawn = 0
                 elif key == 0x1C:
                     sound_tone(1193, 2)
                     if menu_selection == 0:
@@ -75,6 +84,7 @@ def kernel_main() -> None:
                         debug_reset()
                         music_start()
                         stats_last_period = system_periods
+                        survivor_start_period = system_periods
                         draw()
                     elif menu_selection == 1:
                         menu_page = 1
@@ -128,15 +138,32 @@ def kernel_main() -> None:
                             debug_enabled = 1 - debug_enabled
                             if debug_enabled == 0: debug_visible = 0
                     else:
-                        if settings_selection == 1 and (achievements & (1 << 12)) != 0:
+                        if settings_selection == 0:
+                            candidate_music: i32 = music_mode
+                            music_attempt: i32 = 0
+                            while music_attempt < 3:
+                                candidate_music = (candidate_music + direction + 3) % 3
+                                if candidate_music == 0 or (candidate_music == 1 and (achievements & (1 << 10)) != 0) or (candidate_music == 2 and non_hidden_achievement_count() >= 19):
+                                    music_mode = candidate_music
+                                    music_attempt = 3
+                                else:
+                                    music_attempt = music_attempt + 1
+                        elif settings_selection == 1 and (achievements & (1 << 12)) != 0:
                             clock_enabled = 1 - clock_enabled
+                        elif settings_selection == 2:
+                            ghost_enabled = 1 - ghost_enabled
                     menu_drawn = 0
                 elif key == 0x1C:
-                    if settings_selection < 3:
+                    if settings_page == 2 and settings_selection == 0 and music_mode == 2 and non_hidden_achievement_count() >= 19:
+                        music_editor_note = 0
+                        music_name_editing = 0
+                        menu_page = 6
+                        menu_drawn = 0
+                    elif settings_selection < 3:
                         settings_selection = settings_selection + 1
                         menu_drawn = 0
                     else:
-                        has_reward_page: i32 = 1 if (achievements & ((1 << 10) | (1 << 12))) != 0 else 0
+                        has_reward_page: i32 = 1
                         if settings_page == 0 or (settings_page == 1 and has_reward_page == 1):
                             settings_page = settings_page + 1
                             settings_selection = 0
@@ -169,6 +196,65 @@ def kernel_main() -> None:
                 elif key == 0x01:
                     menu_page = 0
                     menu_drawn = 0
+            elif menu_page == 6:
+                if music_name_editing == 1:
+                    if key == 0x1C:
+                        if music_name_length > 0: music_name_editing = 0
+                    elif key == 0x01:
+                        music_name_editing = 0
+                    elif key == 0x0E and music_name_length > 0:
+                        music_name_length = music_name_length - 1
+                        any_name_set(music_name_length, 0)
+                    else:
+                        name_character: i32 = scancode_ascii(key)
+                        if name_character != 0 and music_name_length < 8:
+                            any_name_set(music_name_length, name_character)
+                            music_name_length = music_name_length + 1
+                    menu_drawn = 0
+                elif key == 0x4B:
+                    music_editor_note = (music_editor_note + 31) % 32
+                    menu_drawn = 0
+                elif key == 0x4D:
+                    music_editor_note = (music_editor_note + 1) % 32
+                    menu_drawn = 0
+                elif key == 0x48 or key == 0x50:
+                    editor_note: i32 = any_note_get(music_editor_note)
+                    editor_pitch: i32 = divisor_pitch(editor_note & 0xFFFF)
+                    if key == 0x48 and editor_pitch < 9: editor_pitch = editor_pitch + 1
+                    if key == 0x50 and editor_pitch > 0: editor_pitch = editor_pitch - 1
+                    any_note_set(music_editor_note, pitch_divisor(editor_pitch) | (editor_note & 0xFFFF0000))
+                    menu_drawn = 0
+                elif key >= 0x02 and key <= 0x05:
+                    duration_note: i32 = any_note_get(music_editor_note)
+                    duration_value: i32 = 80
+                    if key == 0x03: duration_value = 40
+                    elif key == 0x04: duration_value = 20
+                    elif key == 0x05: duration_value = 0x8000 | 40
+                    any_note_set(music_editor_note, (duration_note & 0xFFFF) | (duration_value << 16))
+                    menu_drawn = 0
+                elif key == 0x31:
+                    music_name_editing = 1
+                    menu_drawn = 0
+                elif key == 0x13:
+                    any_music_reset()
+                    menu_drawn = 0
+                elif key == 0x1F:
+                    music_start()
+                elif key == 0x1C:
+                    music_stop()
+                    fs_save_any_music()
+                    fs_save_settings()
+                    menu_page = 1
+                    settings_page = 2
+                    settings_selection = 0
+                    menu_drawn = 0
+                elif key == 0x01:
+                    music_stop()
+                    fs_load_any_music()
+                    menu_page = 1
+                    settings_page = 2
+                    settings_selection = 0
+                    menu_drawn = 0
             elif menu_page == 3 or menu_page == 5:
                 if key == 0x1C or key == 0x01:
                     menu_page = 0
@@ -179,15 +265,16 @@ def kernel_main() -> None:
                         achievement_detail_open = 0
                         menu_drawn = 0
                 elif key == 0x48:
-                    achievement_selection = (achievement_selection + 13) % 14
+                    achievement_selection = (achievement_selection + 23) % 24
                     achievement_page = achievement_selection // 7
                     menu_drawn = 0
                 elif key == 0x50:
-                    achievement_selection = (achievement_selection + 1) % 14
+                    achievement_selection = (achievement_selection + 1) % 24
                     achievement_page = achievement_selection // 7
                     menu_drawn = 0
                 elif key == 0x4B or key == 0x4D:
-                    achievement_page = 1 - achievement_page
+                    if key == 0x4B: achievement_page = (achievement_page + 3) % 4
+                    else: achievement_page = (achievement_page + 1) % 4
                     achievement_selection = achievement_page * 7
                     menu_drawn = 0
                 elif key == 0x1C:
@@ -210,14 +297,17 @@ def kernel_main() -> None:
                 arm_move_cooldown(15)
             if move_ready() and key == left_code and fits(piece_x - 1, piece_y, rotation):
                 piece_x = piece_x - 1
+                last_action_rotation = 0
                 arm_move_cooldown(10)
                 redraw = 1
             if move_ready() and key == right_code and fits(piece_x + 1, piece_y, rotation):
                 piece_x = piece_x + 1
+                last_action_rotation = 0
                 arm_move_cooldown(10)
                 redraw = 1
             if move_ready() and key == down_code and fits(piece_x, piece_y + 1, rotation):
                 piece_y = piece_y + 1
+                last_action_rotation = 0
                 arm_move_cooldown(5)
                 redraw = 1
                 if not fits(piece_x, piece_y + 1, rotation):
@@ -225,6 +315,7 @@ def kernel_main() -> None:
                     pit_reset_elapsed()
             if move_ready() and key == rotate_code and fits(piece_x, piece_y, (rotation + 1) % 4):
                 rotation = (rotation + 1) % 4
+                last_action_rotation = 1
                 sound_tone(1356, 1)
                 arm_move_cooldown(15)
                 redraw = 1
@@ -236,18 +327,36 @@ def kernel_main() -> None:
             timer_ready: i32 = pit_poll_elapsed(20 if grounded == 1 else gravity_periods)
             if timer_ready != 0:
                 if grounded == 1 and not fits(piece_x, piece_y + 1, rotation):
+                    completed_t_spin: i32 = 1 if is_t_spin() else 0
                     merge_piece()
+                    if completed_t_spin == 1:
+                        session_tspins = session_tspins + 1
+                        score = score + 400
+                        unlock_achievement(22)
+                        if session_tspins >= 5: unlock_achievement(23)
+                    flash_completed_lines()
                     cleared_lines: i32 = clear_lines()
                     update_combo(cleared_lines)
+                    if cleared_lines > 0 and board_is_empty(): unlock_achievement(19)
+                    if ghost_enabled == 0 and score > 1000: unlock_achievement(20)
+                    sprint_lines = session_lines
                     if cleared_lines > 0:
                         sound_line_clear()
                     else:
                         sound_tone(2386, 2)
-                    spawn()
+                    mode_finished: i32 = 1 if (game_mode == 1 and sprint_lines >= 150) or (game_mode == 2 and sprint_lines >= 40) else 0
+                    if mode_finished == 1:
+                        if game_mode == 1 and session_hold_used == 0: unlock_achievement(17)
+                        if game_mode == 2 and session_hold_used == 0: unlock_achievement(18)
+                        sprint_elapsed_periods = system_periods - sprint_start_period
+                        game_over = 2
+                    else:
+                        spawn()
                     redraw = 1
                 elif fits(piece_x, piece_y + 1, rotation):
                     grounded = 0
                     piece_y = piece_y + 1
+                    last_action_rotation = 0
                     redraw = 1
                     if not fits(piece_x, piece_y + 1, rotation):
                         grounded = 1
@@ -263,7 +372,8 @@ def kernel_main() -> None:
                 fs_save_high_score(score)
                 finish_session()
                 sound_game_over()
-                draw_game_over()
+                if game_over == 2: draw_mode_complete()
+                else: draw_game_over()
                 game_over_drawn = 1
             if key == 0x1C:
                 started = 0
@@ -279,6 +389,8 @@ def kernel_main() -> None:
                 draw()
             else:
                 menu_drawn = 0
+        if started == 0 and menu_page == 6:
+            music_update()
         if started == 1 and game_over == 0:
             if system_periods >= fps_deadline:
                 fps_value = fps_frames

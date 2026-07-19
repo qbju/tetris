@@ -30,6 +30,21 @@ def io_out16(port: i32, value: i32) -> None:
     pass
 
 @ccall
+def any_note_get(index: i32) -> i32:
+    pass
+
+@ccall
+def any_note_set(index: i32, value: i32) -> None:
+    pass
+
+@ccall
+def any_name_get(index: i32) -> i32:
+    pass
+
+@ccall
+def any_name_set(index: i32, value: i32) -> None:
+    pass
+@ccall
 def fs_buffer_get(index: i32) -> i32:
     pass
 
@@ -69,6 +84,13 @@ bgm_volume: i32 = 6
 se_volume: i32 = 5
 debug_enabled: i32 = 1
 clock_enabled: i32 = 1
+ghost_enabled: i32 = 1
+music_mode: i32 = 0
+any_music_generation: i32 = 0
+any_music_slot: i32 = 0
+music_editor_note: i32 = 0
+music_name_editing: i32 = 0
+music_name_length: i32 = 3
 settings_generation: i32 = 0
 settings_slot: i32 = 0
 max_combo: i32 = 0
@@ -237,6 +259,58 @@ def korobeiniki_duration(index: i32) -> i32:
     if step == 34:
         return 40   # phrase rest
     return 40       # quarter note
+def kalinka_note(index: i32) -> i32:
+    # Refrain transcribed from the public-domain Larionov score (E minor, 2/4).
+    step: i32 = index % 23
+    if step == 0 or step == 12 or step == 13: return 1208  # B5
+    if step == 1 or step == 4 or step == 7 or step == 14 or step == 18 or step == 21: return 1356  # A5
+    if step == 2 or step == 5 or step == 9 or step == 16 or step == 19 or step == 22: return 1612  # F#5
+    if step == 3 or step == 6 or step == 8 or step == 15 or step == 17 or step == 20: return 1522  # G5
+    return 1810  # E5
+
+def kalinka_duration(index: i32) -> i32:
+    step: i32 = index % 23
+    if step == 0 or step == 1 or step == 4 or step == 7 or step == 11 or step == 18 or step == 21: return 40
+    if step == 14: return 30
+    if step == 15: return 10
+    return 20
+def pitch_divisor(pitch: i32) -> i32:
+    if pitch == 0: return 1810
+    if pitch == 1: return 1612
+    if pitch == 2: return 1436
+    if pitch == 3: return 1356
+    if pitch == 4: return 1208
+    if pitch == 5: return 1140
+    if pitch == 6: return 1016
+    if pitch == 7: return 905
+    if pitch == 8: return 854
+    return 761
+
+def divisor_pitch(divisor: i32) -> i32:
+    pitch: i32 = 0
+    best_pitch: i32 = 0
+    best_distance: i32 = 100000
+    while pitch < 10:
+        distance: i32 = pitch_divisor(pitch) - divisor
+        if distance < 0: distance = -distance
+        if distance < best_distance:
+            best_distance = distance
+            best_pitch = pitch
+        pitch = pitch + 1
+    return best_pitch
+
+def any_music_reset() -> None:
+    global music_name_length
+    index: i32 = 0
+    while index < 32:
+        any_note_set(index, korobeiniki_note(index) | (korobeiniki_duration(index) << 16))
+        index = index + 1
+    any_name_set(0, 65); any_name_set(1, 78); any_name_set(2, 89)
+    index = 3
+    while index < 8:
+        any_name_set(index, 0)
+        index = index + 1
+    music_name_length = 3
 def music_start() -> None:
     global music_index, music_deadline, music_note_off, music_sounding, music_playing
     music_index = 0
@@ -260,8 +334,24 @@ def music_update() -> None:
         speaker_stop()
         music_sounding = 0
     if music_playing == 1 and system_periods >= music_deadline:
-        duration: i32 = korobeiniki_duration(music_index)
-        note: i32 = korobeiniki_note(music_index)
+        duration: i32 = 0
+        note: i32 = 0
+        music_length: i32 = 35
+        if music_mode == 2:
+            packed_note: i32 = any_note_get(music_index % 32)
+            note = packed_note & 0xFFFF
+            duration = (packed_note >> 16) & 0xFFFF
+            if (duration & 0x8000) != 0:
+                note = 0
+                duration = duration & 0x7FFF
+            music_length = 32
+        elif music_mode == 1:
+            note = kalinka_note(music_index)
+            duration = kalinka_duration(music_index)
+            music_length = 23
+        else:
+            duration = korobeiniki_duration(music_index)
+            note = korobeiniki_note(music_index)
         if note != 0 and bgm_volume > 0:
             speaker_start(note)
             music_sounding = 1
@@ -270,7 +360,7 @@ def music_update() -> None:
             music_sounding = 0
         music_note_off = system_periods + (duration * bgm_volume) // 10
         music_deadline = system_periods + duration
-        music_index = (music_index + 1) % 35
+        music_index = (music_index + 1) % music_length
 
 def se_note(index: i32) -> i32:
     if index == 0: return se_note_0

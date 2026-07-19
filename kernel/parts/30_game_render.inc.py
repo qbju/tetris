@@ -33,6 +33,28 @@ def fits(nx: i32, ny: i32, nr: i32) -> bool:
         cell = cell + 1
     return True
 
+def is_t_spin() -> bool:
+    if kind != 2 or last_action_rotation == 0: return False
+    center_x: i32 = piece_x + 1
+    center_y: i32 = piece_y + 1
+    occupied_corners: i32 = 0
+    corner: i32 = 0
+    while corner < 4:
+        corner_x: i32 = center_x + (-1 if corner % 2 == 0 else 1)
+        corner_y: i32 = center_y + (-1 if corner < 2 else 1)
+        if corner_x < 0 or corner_x >= 10 or corner_y < -4 or corner_y >= 20:
+            occupied_corners = occupied_corners + 1
+        elif board_get((corner_y + 4) * 10 + corner_x) != 0:
+            occupied_corners = occupied_corners + 1
+        corner = corner + 1
+    return occupied_corners >= 3
+
+def board_is_empty() -> bool:
+    empty_index: i32 = 0
+    while empty_index < 240:
+        if board_get(empty_index) != 0: return False
+        empty_index = empty_index + 1
+    return True
 def merge_piece() -> None:
     global merge_count, total_pieces
     merge_count = merge_count + 1
@@ -49,6 +71,40 @@ def merge_piece() -> None:
                 board_set((by + 4) * 10 + bx, kind + 1)
         cell = cell + 1
 
+def flash_completed_lines() -> None:
+    # Flash every completed visible row for about 200 ms before compression.
+    any_full: i32 = 0
+    scan_y: i32 = 4
+    while scan_y < 24:
+        scan_full: i32 = 1
+        scan_x: i32 = 0
+        while scan_x < 10:
+            if board_get(scan_y * 10 + scan_x) == 0: scan_full = 0
+            scan_x = scan_x + 1
+        if scan_full == 1: any_full = 1
+        scan_y = scan_y + 1
+    if any_full == 0: return
+    flash_step: i32 = 0
+    while flash_step < 4:
+        physical_y: i32 = 4
+        while physical_y < 24:
+            full: i32 = 1
+            check_x: i32 = 0
+            while check_x < 10:
+                if board_get(physical_y * 10 + check_x) == 0: full = 0
+                check_x = check_x + 1
+            if full == 1:
+                flash_x: i32 = 0
+                while flash_x < 10:
+                    flash_colour: i32 = 0x0F if flash_step % 2 == 0 else 0x07
+                    ui_put_cell(5 + flash_x * 2, physical_y - 2, 219, flash_colour)
+                    ui_put_cell(6 + flash_x * 2, physical_y - 2, 219, flash_colour)
+                    flash_x = flash_x + 1
+            physical_y = physical_y + 1
+        pit_reset_elapsed()
+        while pit_poll_elapsed(5) == 0:
+            sound_update()
+        flash_step = flash_step + 1
 def clear_lines() -> i32:
     global score
     cleared: i32 = 0
@@ -138,7 +194,7 @@ def take_bag() -> i32:
     return result
 
 def spawn() -> None:
-    global kind, rotation, piece_x, piece_y, next_kind, game_over, hold_used, grounded
+    global kind, rotation, piece_x, piece_y, next_kind, game_over, hold_used, grounded, last_action_rotation
     kind = next_kind
     next_kind = take_bag()
     rotation = 0
@@ -146,10 +202,13 @@ def spawn() -> None:
     piece_y = -1
     hold_used = 0
     grounded = 0
+    last_action_rotation = 0
     if not fits(piece_x, piece_y, rotation): game_over = 1
 
 def hold_piece() -> None:
-    global kind, held_kind, rotation, piece_x, piece_y, next_kind, hold_used, game_over, grounded
+    global kind, held_kind, rotation, piece_x, piece_y, next_kind, hold_used, game_over, grounded, session_hold_used, last_action_rotation
+    session_hold_used = 1
+    last_action_rotation = 0
     old_kind: i32 = kind
     if held_kind < 0:
         held_kind = old_kind
@@ -277,6 +336,22 @@ def draw() -> None:
     ui_put_cell(4, 1, 201, 0x1B); ui_put_cell(25, 1, 187, 0x1B)
     ui_put_cell(4, 22, 200, 0x1B); ui_put_cell(25, 22, 188, 0x1B)
 
+    # Ghost piece: simulate downward movement without mutating game state.
+    ghost_y: i32 = piece_y
+    while fits(piece_x, ghost_y + 1, rotation):
+        ghost_y = ghost_y + 1
+    if ghost_enabled == 1 and ghost_y > piece_y:
+        ghost_mask: i32 = shape(kind, rotation)
+        ghost_cell: i32 = 0
+        while ghost_cell < 16:
+            if (ghost_mask & (1 << ghost_cell)) != 0:
+                ghost_x: i32 = 5 + (piece_x + ghost_cell % 4) * 2
+                ghost_screen_y: i32 = 2 + ghost_y + ghost_cell // 4
+                if ghost_screen_y >= 2:
+                    ui_put_cell(ghost_x, ghost_screen_y, 176, 0x08)
+                    ui_put_cell(ghost_x + 1, ghost_screen_y, 176, 0x08)
+            ghost_cell = ghost_cell + 1
+
     mask: i32 = shape(kind, rotation)
     cell: i32 = 0
     active_colour: i32 = 0x0A + kind % 6
@@ -333,6 +408,21 @@ def draw() -> None:
         text(55, 16, 67, 0x0E); text(56, 16, 76, 0x0E); text(57, 16, 79, 0x0E); text(58, 16, 67, 0x0E); text(59, 16, 75, 0x0E)
         text(61, 16, 48 + (minutes // 10) % 10, 0x0F); text(62, 16, 48 + minutes % 10, 0x0F); text(63, 16, 58, 0x0F)
         text(64, 16, 48 + seconds // 10, 0x0F); text(65, 16, 48 + seconds % 10, 0x0F)
+    # Current mode and objective.
+    if game_mode == 0:
+        text(55, 18, 69, 0x0B); text(56, 18, 78, 0x0B); text(57, 18, 68, 0x0B); text(58, 18, 76, 0x0B); text(59, 18, 69, 0x0B); text(60, 18, 83, 0x0B); text(61, 18, 83, 0x0B)
+    elif game_mode == 1:
+        text(55, 18, 77, 0x0B); text(56, 18, 65, 0x0B); text(57, 18, 82, 0x0B); text(58, 18, 65, 0x0B); text(59, 18, 84, 0x0B); text(60, 18, 72, 0x0B); text(61, 18, 79, 0x0B); text(62, 18, 78, 0x0B)
+    else:
+        text(55, 18, 83, 0x0B); text(56, 18, 80, 0x0B); text(57, 18, 82, 0x0B); text(58, 18, 73, 0x0B); text(59, 18, 78, 0x0B); text(60, 18, 84, 0x0B); text(62, 18, 52, 0x0B); text(63, 18, 48, 0x0B)
+    if game_mode != 0:
+        mode_target: i32 = 150 if game_mode == 1 else 40
+        text(55, 20, 76, 0x0E); text(56, 20, 73, 0x0E); text(57, 20, 78, 0x0E); text(58, 20, 69, 0x0E); text(59, 20, 83, 0x0E)
+        text(61, 20, 48 + (session_lines // 100) % 10, 0x0F); text(62, 20, 48 + (session_lines // 10) % 10, 0x0F); text(63, 20, 48 + session_lines % 10, 0x0F)
+        text(64, 20, 47, 0x07); text(65, 20, 48 + (mode_target // 100) % 10, 0x07); text(66, 20, 48 + (mode_target // 10) % 10, 0x07); text(67, 20, 48 + mode_target % 10, 0x07)
+        live_seconds: i32 = (system_periods - sprint_start_period) // 100
+        text(55, 22, 84, 0x0E); text(56, 22, 73, 0x0E); text(57, 22, 77, 0x0E); text(58, 22, 69, 0x0E)
+        text(60, 22, 48 + (live_seconds // 600) % 10, 0x0F); text(61, 22, 48 + (live_seconds // 60) % 10, 0x0F); text(62, 22, 58, 0x0F); text(63, 22, 48 + (live_seconds % 60) // 10, 0x0F); text(64, 22, 48 + live_seconds % 10, 0x0F)
     draw_achievement_popup()
     if game_over == 1:
         text(31, 8, 71, 0x0C); text(32, 8, 65, 0x0C)
@@ -421,7 +511,7 @@ def finish_session() -> None:
     if session_palette == 2 and score >= 1000: unlock_achievement(12)
     fs_save_statistics()
 def reset_game() -> None:
-    global kind, rotation, piece_x, piece_y, next_kind, score, game_over, held_kind, hold_used, grounded, game_initialized, merge_count, game_over_drawn, bag_index, last_bag_kind, rng_state, current_combo, session_lines, session_silent, session_palette, game_start_rtc
+    global kind, rotation, piece_x, piece_y, next_kind, score, game_over, held_kind, hold_used, grounded, game_initialized, merge_count, game_over_drawn, bag_index, last_bag_kind, rng_state, current_combo, session_lines, session_silent, session_palette, game_start_rtc, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period
     index: i32 = 0
     while index < 240:
         board_set(index, 0)
@@ -439,9 +529,20 @@ def reset_game() -> None:
     held_kind = -1
     hold_used = 0
     grounded = 0
+    last_action_rotation = 0
     merge_count = 0
     current_combo = 0
     session_lines = 0
+    sprint_lines = 0
+    sprint_start_period = system_periods
+    sprint_elapsed_periods = 0
+    session_hold_used = 0
+    session_tspins = 0
+    last_action_rotation = 0
+    survivor_start_period = system_periods
+    if game_mode == 0: unlock_achievement(14)
+    elif game_mode == 1: unlock_achievement(15)
+    else: unlock_achievement(16)
     session_silent = 1 if bgm_volume == 0 and se_volume == 0 else 0
     session_palette = color_mode
     game_start_rtc = rtc_seconds_of_day()
@@ -450,6 +551,20 @@ def reset_game() -> None:
     game_initialized = 1
 
 
+def draw_mode_complete() -> None:
+    clear_screen(0x10)
+    # MODE COMPLETE
+    text(32, 7, 77, 0x0E); text(33, 7, 79, 0x0E); text(34, 7, 68, 0x0E); text(35, 7, 69, 0x0E)
+    text(37, 7, 67, 0x0A); text(38, 7, 79, 0x0A); text(39, 7, 77, 0x0A); text(40, 7, 80, 0x0A); text(41, 7, 76, 0x0A); text(42, 7, 69, 0x0A); text(43, 7, 84, 0x0A); text(44, 7, 69, 0x0A)
+    if game_mode == 1:
+        text(34, 10, 77, 0x0F); text(35, 10, 65, 0x0F); text(36, 10, 82, 0x0F); text(37, 10, 65, 0x0F); text(38, 10, 84, 0x0F); text(39, 10, 72, 0x0F); text(40, 10, 79, 0x0F); text(41, 10, 78, 0x0F)
+    else:
+        text(34, 10, 83, 0x0F); text(35, 10, 80, 0x0F); text(36, 10, 82, 0x0F); text(37, 10, 73, 0x0F); text(38, 10, 78, 0x0F); text(39, 10, 84, 0x0F); text(41, 10, 52, 0x0F); text(42, 10, 48, 0x0F)
+    result_seconds: i32 = sprint_elapsed_periods // 100
+    text(31, 13, 84, 0x0B); text(32, 13, 73, 0x0B); text(33, 13, 77, 0x0B); text(34, 13, 69, 0x0B)
+    text(37, 13, 48 + (result_seconds // 600) % 10, 0x0F); text(38, 13, 48 + (result_seconds // 60) % 10, 0x0F); text(39, 13, 58, 0x0F); text(40, 13, 48 + (result_seconds % 60) // 10, 0x0F); text(41, 13, 48 + result_seconds % 10, 0x0F)
+    text(31, 17, 69, 0x07); text(32, 17, 78, 0x07); text(33, 17, 84, 0x07); text(34, 17, 69, 0x07); text(35, 17, 82, 0x07); text(36, 17, 58, 0x07)
+    text(38, 17, 72, 0x0B); text(39, 17, 79, 0x0B); text(40, 17, 77, 0x0B); text(41, 17, 69, 0x0B)
 def draw_game_over() -> None:
     # PIT-paced curtains sweep inward from both sides in about 400 ms.
     inset: i32 = 0

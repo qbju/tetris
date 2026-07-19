@@ -118,6 +118,28 @@ def build() -> bytes:
     b.store(set_fn.args[1], b.gep(bag, [c0, set_fn.args[0]], inbounds=True))
     b.ret_void()
 
+    music_type = ir.ArrayType(i32, 32)
+    any_music = ir.GlobalVariable(module, music_type, name="any_music_data")
+    any_music.linkage = "internal"
+    any_music.initializer = ir.Constant(music_type, None)
+    get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="any_note_get")
+    b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+    b.ret(b.load(b.gep(any_music, [c0, get_fn.args[0]], inbounds=True)))
+    set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="any_note_set")
+    b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+    b.store(set_fn.args[1], b.gep(any_music, [c0, set_fn.args[0]], inbounds=True))
+    b.ret_void()
+    name_type = ir.ArrayType(i32, 8)
+    any_name = ir.GlobalVariable(module, name_type, name="any_music_name")
+    any_name.linkage = "internal"
+    any_name.initializer = ir.Constant(name_type, None)
+    get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="any_name_get")
+    b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+    b.ret(b.load(b.gep(any_name, [c0, get_fn.args[0]], inbounds=True)))
+    set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="any_name_set")
+    b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+    b.store(set_fn.args[1], b.gep(any_name, [c0, set_fn.args[0]], inbounds=True))
+    b.ret_void()
     buffer_type = ir.ArrayType(i32, 512)
     sector_buffer = ir.GlobalVariable(module, buffer_type, name="fs_sector_buffer")
     sector_buffer.linkage = "internal"
@@ -164,6 +186,7 @@ def build() -> bytes:
     konami_palette = tuple((min(63, red + blue // 3), green // 4, 0 if colour < 8 else min(63, red + green)) for colour, (red, green, blue) in enumerate(normal_palette))
     # Keep UI foreground entries white and UI background entries black in 01 mode.
     binary_palette = tuple(((0, 0, 0) if colour < 7 else (63, 63, 63)) for colour in range(16))
+    golden_palette = tuple((min(63, 12 + red), min(63, 6 + (red + green) // 2), blue // 6) for red, green, blue in normal_palette)
     palette_fn = ir.Function(module, ir.FunctionType(void, [i32]), name="vga_set_palette")
     pb = ir.IRBuilder(palette_fn.append_basic_block("entry"))
     out(pb, 0x3C8, 0)
@@ -171,6 +194,7 @@ def build() -> bytes:
     is_inverted = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 2))
     is_konami = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 3))
     is_binary = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 4))
+    is_golden = pb.icmp_signed("==", palette_fn.args[0], ir.Constant(i32, 5))
     for colour_index in range(16):
         for component in range(3):
             normal_value = ir.Constant(i32, normal_palette[colour_index][component])
@@ -178,7 +202,8 @@ def build() -> bytes:
             inverted_value = ir.Constant(i32, inverted_palette[colour_index][component])
             konami_value = ir.Constant(i32, konami_palette[colour_index][component])
             binary_value = ir.Constant(i32, binary_palette[colour_index][component])
-            selected = pb.select(is_gray, gray_value, pb.select(is_inverted, inverted_value, pb.select(is_konami, konami_value, pb.select(is_binary, binary_value, normal_value))))
+            golden_value = ir.Constant(i32, golden_palette[colour_index][component])
+            selected = pb.select(is_gray, gray_value, pb.select(is_inverted, inverted_value, pb.select(is_konami, konami_value, pb.select(is_binary, binary_value, pb.select(is_golden, golden_value, normal_value)))))
             pb.call(io_out8, [ir.Constant(i32, 0x3C9), selected])
     pb.ret_void()
 
