@@ -86,6 +86,12 @@ def update_combo(cleared: i32) -> None:
         fs_save_max_combo(current_combo)
     else:
         current_combo = 0
+def seed_rng() -> None:
+    global rng_state
+    timer_sample: i32 = pit_latch_current()
+    rng_state = (timer_sample ^ (system_periods * 25173) ^ (last_key * 257) ^ 0xA361) & 0xFFFF
+    if rng_state == 0:
+        rng_state = 1
 def random_bounded(limit: i32) -> i32:
     global rng_state
     rng_state = (rng_state * 25173 + 13849) % 65536
@@ -403,7 +409,7 @@ def reset_game() -> None:
     piece_y = -1
     bag_index = 7
     last_bag_kind = -1
-    rng_state = pit_last if pit_last != 0 else 1
+    seed_rng()
     next_kind = take_bag()
     score = 0
     game_over = 0
@@ -428,7 +434,8 @@ def draw_game_over() -> None:
             y = y + 1
         pit_reset_elapsed()
         while pit_poll_elapsed(1) == 0:
-            pass
+            sound_update()
+        sound_update()
         inset = inset + 1
     # GAME OVER
     ui_put_cell(35, 10, 71, 0x0C); ui_put_cell(36, 10, 65, 0x0C)

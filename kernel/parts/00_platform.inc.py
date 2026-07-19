@@ -55,6 +55,8 @@ def bag_set(index: i32, value: i32) -> None:
 
 pit_last: i32 = 0
 pit_periods: i32 = 0
+pit_subticks: i32 = 0
+pit_reload: i32 = 11932
 move_cooldown_periods: i32 = 0
 high_score: i32 = 0
 high_generation: i32 = 0
@@ -83,6 +85,19 @@ music_deadline: i32 = 0
 music_note_off: i32 = 0
 music_sounding: i32 = 0
 music_playing: i32 = 0
+se_playing: i32 = 0
+se_sounding: i32 = 0
+se_index: i32 = 0
+se_count: i32 = 0
+se_deadline: i32 = 0
+se_note_off: i32 = 0
+se_music_remaining: i32 = 0
+se_note_0: i32 = 0
+se_note_1: i32 = 0
+se_note_2: i32 = 0
+se_duration_0: i32 = 0
+se_duration_1: i32 = 0
+se_duration_2: i32 = 0
 bag_index: i32 = 7
 last_bag_kind: i32 = -1
 rng_state: i32 = 1
@@ -95,32 +110,45 @@ def keyboard_scancode() -> i32:
             return code
     return 0
 
-def pit_init() -> None:
-    global pit_last, pit_periods, system_periods
-    system_periods = 0
-    divisor: i32 = 11932
-    io_out8(0x43, 0x34)
-    io_out8(0x40, divisor & 0xFF)
-    io_out8(0x40, (divisor >> 8) & 0xFF)
-    pit_periods = 0
+def pit_latch_current() -> i32:
     io_out8(0x43, 0)
-    pit_last = io_in8(0x40) | (io_in8(0x40) << 8)
+    return io_in8(0x40) | (io_in8(0x40) << 8)
+
+def pit_init() -> None:
+    global pit_last, pit_periods, pit_subticks, system_periods
+    system_periods = 0
+    pit_periods = 0
+    pit_subticks = 0
+    io_out8(0x43, 0x34)
+    io_out8(0x40, pit_reload & 0xFF)
+    io_out8(0x40, (pit_reload >> 8) & 0xFF)
+    pit_last = pit_latch_current()
+
+def pit_update_clock() -> None:
+    global pit_last, pit_periods, pit_subticks, move_cooldown_periods, system_periods
+    current: i32 = pit_latch_current()
+    delta: i32 = pit_last - current if current <= pit_last else pit_last + pit_reload - current
+    pit_last = current
+    pit_subticks = pit_subticks + delta
+    elapsed: i32 = 0
+    while pit_subticks >= pit_reload:
+        pit_subticks = pit_subticks - pit_reload
+        elapsed = elapsed + 1
+    if elapsed > 0:
+        system_periods = system_periods + elapsed
+        pit_periods = pit_periods + elapsed
+        if move_cooldown_periods > elapsed:
+            move_cooldown_periods = move_cooldown_periods - elapsed
+        else:
+            move_cooldown_periods = 0
 
 def pit_poll_elapsed(target_periods: i32) -> i32:
-    global pit_last, pit_periods, move_cooldown_periods, system_periods
-    io_out8(0x43, 0)
-    current: i32 = io_in8(0x40) | (io_in8(0x40) << 8)
-    if current > pit_last:
-        system_periods = system_periods + 1
-        pit_periods = pit_periods + 1
-        if move_cooldown_periods > 0:
-            move_cooldown_periods = move_cooldown_periods - 1
-    pit_last = current
+    global pit_periods
+    pit_update_clock()
     if pit_periods >= target_periods:
-        pit_periods = 0
+        pit_periods = pit_periods - target_periods
         return 1
     return 0
-
 def move_ready() -> bool:
     return move_cooldown_periods == 0
 
@@ -129,10 +157,9 @@ def arm_move_cooldown(periods: i32) -> None:
     move_cooldown_periods = periods
 
 def pit_reset_elapsed() -> None:
-    global pit_last, pit_periods
+    global pit_periods
+    pit_update_clock()
     pit_periods = 0
-    io_out8(0x43, 0)
-    pit_last = io_in8(0x40) | (io_in8(0x40) << 8)
 
 def speaker_start(divisor: i32) -> None:
     speaker: i32 = io_in8(0x61)
@@ -187,10 +214,13 @@ def music_stop() -> None:
     global music_playing, music_sounding
     music_playing = 0
     music_sounding = 0
-    speaker_stop()
+    if se_playing == 0: speaker_stop()
 
 def music_update() -> None:
     global music_index, music_deadline, music_note_off, music_sounding
+    # Channel 2 belongs exclusively to SE while an effect is active.
+    if se_playing != 0:
+        return
     if music_playing == 1 and music_sounding == 1 and system_periods >= music_note_off:
         speaker_stop()
         music_sounding = 0
@@ -203,34 +233,75 @@ def music_update() -> None:
         else:
             speaker_stop()
             music_sounding = 0
-        # A short gap between notes lowers perceived PC-speaker volume and
-        # keeps the melody articulated instead of producing a solid square wave.
         music_note_off = system_periods + (duration * bgm_volume) // 10
         music_deadline = system_periods + duration
         music_index = (music_index + 1) % 35
-def sound_tone(divisor: i32, duration: i32) -> None:
+
+def se_note(index: i32) -> i32:
+    if index == 0: return se_note_0
+    if index == 1: return se_note_1
+    return se_note_2
+
+def se_duration(index: i32) -> i32:
+    if index == 0: return se_duration_0
+    if index == 1: return se_duration_1
+    return se_duration_2
+
+def sound_begin_slot() -> None:
+    global se_deadline, se_note_off, se_sounding, music_sounding
+    duration: i32 = se_duration(se_index)
+    note: i32 = se_note(se_index)
+    music_sounding = 0
+    if note != 0 and se_volume > 0:
+        speaker_start(note)
+        se_sounding = 1
+    else:
+        speaker_stop()
+        se_sounding = 0
+    se_note_off = system_periods + (duration * se_volume) // 10
+    se_deadline = system_periods + duration
+
+def sound_sequence(note0: i32, duration0: i32, note1: i32, duration1: i32, note2: i32, duration2: i32, count: i32) -> None:
+    global se_note_0, se_note_1, se_note_2, se_duration_0, se_duration_1, se_duration_2, se_index, se_count, se_playing, se_music_remaining
     if se_volume == 0:
         return
-    sound_duration: i32 = (duration * se_volume + 9) // 10
-    if sound_duration < 1:
-        sound_duration = 1
-    # PIT channel 2 drives the PC speaker; channel 0 remains the game clock.
-    speaker: i32 = io_in8(0x61)
-    io_out8(0x43, 0xB6)
-    io_out8(0x42, divisor & 0xFF)
-    io_out8(0x42, (divisor >> 8) & 0xFF)
-    io_out8(0x61, speaker | 3)
-    pit_reset_elapsed()
-    while pit_poll_elapsed(sound_duration) == 0:
-        pass
-    io_out8(0x61, speaker & 0xFC)
-    pit_reset_elapsed()
+    if se_playing == 0:
+        se_music_remaining = music_deadline - system_periods if music_deadline > system_periods else 0
+    se_note_0 = note0
+    se_note_1 = note1
+    se_note_2 = note2
+    se_duration_0 = duration0
+    se_duration_1 = duration1
+    se_duration_2 = duration2
+    se_index = 0
+    se_count = count
+    se_playing = 1
+    sound_begin_slot()
+
+def sound_update() -> None:
+    global se_index, se_playing, se_sounding, music_deadline
+    if se_playing == 0:
+        return
+    if se_sounding == 1 and system_periods >= se_note_off:
+        speaker_stop()
+        se_sounding = 0
+    if system_periods >= se_deadline:
+        se_index = se_index + 1
+        if se_index >= se_count:
+            se_playing = 0
+            se_sounding = 0
+            speaker_stop()
+            # Preserve the musical clock: SE pauses the remaining interval
+            # instead of forcing the next BGM note to start early.
+            music_deadline = system_periods + se_music_remaining
+        else:
+            sound_begin_slot()
+
+def sound_tone(divisor: i32, duration: i32) -> None:
+    sound_sequence(divisor, duration, 0, 0, 0, 0, 1)
 
 def sound_line_clear() -> None:
-    sound_tone(1193, 2)
-    sound_tone(796, 3)
+    sound_sequence(1193, 2, 796, 3, 0, 0, 2)
 
 def sound_game_over() -> None:
-    sound_tone(1193, 3)
-    sound_tone(1591, 3)
-    sound_tone(2386, 5)
+    sound_sequence(1193, 3, 1591, 3, 2386, 5, 3)

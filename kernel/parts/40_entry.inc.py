@@ -11,6 +11,8 @@ def kernel_main() -> None:
     redraw: i32 = 0
     while True:
         redraw = 0
+        pit_update_clock()
+        sound_update()
         key: i32 = keyboard_scancode()
         if started == 1 and system_periods > stats_last_period:
             total_play_periods = total_play_periods + system_periods - stats_last_period
@@ -60,6 +62,8 @@ def kernel_main() -> None:
                         clear_screen(0x10)
                         if game_initialized == 0:
                             reset_game()
+                        # Menu time must not count toward the first gravity step.
+                        pit_reset_elapsed()
                         arm_move_cooldown(15)
                         debug_reset()
                         music_start()
