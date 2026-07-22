@@ -1,5 +1,7 @@
 from lpython import i32, ccall
 
+keyboard_shifted: i32 = 0
+
 # All game policy is LPython. The linked functions are hardware/render edges.
 @ccall
 def vga_set_mode13() -> None:
@@ -13,6 +15,35 @@ def vga_set_palette(mode: i32) -> None:
 def ui_put_cell(x: i32, y: i32, glyph: i32, colour: i32) -> None:
     pass
 
+@ccall
+def ui_fill_rect(x: i32, y: i32, width: i32, height: i32, colour: i32) -> None:
+    pass
+@ccall
+def ui_set_render_target(target: i32) -> None:
+    pass
+
+@ccall
+def ui_present_diff(reveal_x: i32) -> None:
+    pass
+@ccall
+def elf_image_size() -> i32:
+    pass
+
+@ccall
+def elf_image_get(index: i32) -> i32:
+    pass
+
+@ccall
+def physical_write8(address: i32, value: i32) -> None:
+    pass
+
+@ccall
+def physical_read8(address: i32) -> i32:
+    pass
+
+@ccall
+def elf_call_entry(address: i32) -> i32:
+    pass
 @ccall
 def io_in8(port: i32) -> i32:
     pass
@@ -43,6 +74,13 @@ def any_name_get(index: i32) -> i32:
 
 @ccall
 def any_name_set(index: i32, value: i32) -> None:
+    pass
+@ccall
+def extension_memory_get(index: i32) -> i32:
+    pass
+
+@ccall
+def extension_memory_set(index: i32, value: i32) -> None:
     pass
 @ccall
 def fs_buffer_get(index: i32) -> i32:
@@ -160,11 +198,18 @@ def rtc_seconds_of_day() -> i32:
         hour = bcd_value(hour & 0x7F)
     return hour * 3600 + minute * 60 + second
 def keyboard_scancode() -> i32:
+    global keyboard_shifted
     while (io_in8(0x64) & 1) != 0:
         status: i32 = io_in8(0x64)
         code: i32 = io_in8(0x60)
-        if (status & 0x20) == 0 and code != 0xE0 and code != 0xE1 and (code & 0x80) == 0:
-            return code
+        if (status & 0x20) == 0 and code != 0xE0 and code != 0xE1:
+            if code == 0x2A or code == 0x36:
+                keyboard_shifted = 1
+                return code
+            if code == 0xAA or code == 0xB6:
+                keyboard_shifted = 0
+            elif (code & 0x80) == 0:
+                return code
     return 0
 
 def pit_latch_current() -> i32:

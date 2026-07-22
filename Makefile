@@ -4,6 +4,7 @@ ISO := $(BUILD)/pythonos.iso
 DATA := storage/pythonos-data.img
 LPYTHON_INC := /opt/conda/share/lpython/lib/impure
 KERNEL_PARTS := $(wildcard kernel/parts/*.inc.py)
+EXTENSIONS := $(wildcard extension/*.py extension/*.PY)
 
 .PHONY: all run clean
 all: $(ISO) $(DATA)
@@ -16,11 +17,14 @@ $(BUILD):
 $(DATA):
 	mkdir -p storage
 	test -f $@ || truncate -s 4M $@
-$(BUILD)/hw.o: tools/gen_hw_object.py | $(BUILD)
+$(BUILD)/hello.elf: extension/hello.c extension/hello.ld | $(BUILD)
+	gcc -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -static -no-pie -Wl,--build-id=none -Wl,-T,extension/hello.ld -o $@ extension/hello.c
+
+$(BUILD)/hw.o: tools/gen_hw_object.py $(BUILD)/hello.elf | $(BUILD)
 	python3 tools/gen_hw_object.py $@
 
 # Amalgamate the maintainable source fragments, then let LPython emit C.
-$(BUILD)/kernel.py: tools/gen_kernel_source.py kernel/main.py $(KERNEL_PARTS) | $(BUILD)
+$(BUILD)/kernel.py: tools/gen_kernel_source.py kernel/main.py $(KERNEL_PARTS) $(EXTENSIONS) | $(BUILD)
 	python3 tools/gen_kernel_source.py $@
 
 $(BUILD)/kernel.c: $(BUILD)/kernel.py

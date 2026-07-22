@@ -1,5 +1,46 @@
+def draw_current_menu_page() -> None:
+    if menu_page == 0:
+        draw_menu()
+    elif menu_page == 1:
+        draw_settings()
+    elif menu_page == 2:
+        draw_reset_dialog()
+    elif menu_page == 3:
+        draw_statistics()
+    elif menu_page == 4:
+        draw_achievements()
+    elif menu_page == 5:
+        draw_build_info()
+    elif menu_page == 6:
+        draw_music_editor()
+    elif menu_page == 7:
+        draw_extensions()
+    else:
+        extension_draw(extension_active)
+
+
+def begin_ui_transition() -> None:
+    global ui_transition_active
+    if extension_transition_enabled() != 0:
+        extension_transition_begin()
+        ui_transition_active = 1
+        ui_present_diff(0)
+    else:
+        ui_transition_active = 0
+        ui_present_diff(320)
+
+
+def update_ui_transition() -> None:
+    global ui_transition_active
+    if ui_transition_active == 0: return
+    reveal: i32 = extension_transition_step()
+    if reveal < 0: reveal = 0
+    if reveal > 320: reveal = 320
+    ui_present_diff(reveal)
+    if reveal >= 320: ui_transition_active = 0
+
 def kernel_main() -> None:
-    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length
+    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length, extension_selection, extension_active, ui_transition_active
     vga_set_mode13()
     cell: i32 = 0
     while cell < 240:
@@ -13,6 +54,7 @@ def kernel_main() -> None:
         redraw = 0
         pit_update_clock()
         sound_update()
+        if started == 0 and menu_page == 8: extension_update(extension_active)
         key: i32 = keyboard_scancode()
         if started == 1 and system_periods > stats_last_period:
             total_play_periods = total_play_periods + system_periods - stats_last_period
@@ -22,7 +64,7 @@ def kernel_main() -> None:
             unlock_achievement(21)
         if key != 0:
             last_key = key
-        if debug_enabled == 1 and (key == 0x2A or key == 0x36):
+        if debug_enabled == 1 and menu_page != 8 and (key == 0x2A or key == 0x36):
             debug_visible = 0 if debug_visible == 1 else 1
             debug_reset()
             if started == 0:
@@ -36,27 +78,23 @@ def kernel_main() -> None:
 
         if started == 0:
             if menu_drawn == 0:
-                if menu_page == 0:
-                    draw_menu()
-                elif menu_page == 1:
-                    draw_settings()
-                elif menu_page == 2:
-                    draw_reset_dialog()
-                elif menu_page == 3:
-                    draw_statistics()
-                elif menu_page == 4:
-                    draw_achievements()
-                elif menu_page == 5:
-                    draw_build_info()
+                if menu_page == 8:
+                    ui_set_render_target(0)
+                    draw_current_menu_page()
+                    ui_transition_active = 0
                 else:
-                    draw_music_editor()
+                    ui_set_render_target(1)
+                    draw_current_menu_page()
+                    ui_set_render_target(0)
+                    begin_ui_transition()
                 menu_drawn = 1
                 debug_reset()
+            elif ui_transition_active == 1:
+                update_ui_transition()
             elif debug_visible == 1 and menu_page == 0 and key != 0:
                 put_hex8(last_key, 48, 19)
-
             if menu_page == 0:
-                menu_count: i32 = 6 if (achievements & (1 << 13)) != 0 else 5
+                menu_count: i32 = 7 if extension_count() > 0 else (6 if (achievements & (1 << 13)) != 0 else 5)
                 update_konami(key)
                 if key == 0x48:
                     menu_selection = (menu_selection + menu_count - 1) % menu_count
@@ -102,8 +140,12 @@ def kernel_main() -> None:
                         menu_page = 4
                         achievement_page = 0
                         menu_drawn = 0
-                    else:
+                    elif menu_selection == 5:
                         menu_page = 5
+                        menu_drawn = 0
+                    else:
+                        extension_selection = 0
+                        menu_page = 7
                         menu_drawn = 0
             elif menu_page == 1:
                 if key == 0x48:
@@ -195,6 +237,38 @@ def kernel_main() -> None:
                     menu_drawn = 0
                 elif key == 0x01:
                     menu_page = 0
+                    menu_drawn = 0
+            elif menu_page == 7:
+                extension_total: i32 = extension_count()
+                if key == 0x48 and extension_total > 0:
+                    extension_selection = (extension_selection + extension_total - 1) % extension_total
+                    menu_drawn = 0
+                elif key == 0x50 and extension_total > 0:
+                    extension_selection = (extension_selection + 1) % extension_total
+                    menu_drawn = 0
+                elif key == 0x1C and extension_total > 0:
+                    extension_active = extension_selection
+                    extension_enter(extension_active)
+                    menu_page = 8
+                    menu_drawn = 0
+                elif key == 0x01:
+                    menu_page = 0
+                    menu_selection = 6
+                    menu_drawn = 0
+            elif menu_page == 8:
+                extension_result: i32 = extension_key(extension_active, key)
+                if extension_result == 3:
+                    menu_drawn = 0
+                elif key == 0x01 or extension_result != 0:
+                    extension_exit(extension_active)
+                    if extension_result == 2:
+                        menu_page = 0
+                        menu_selection = 0
+                    else:
+                        vga_set_palette(color_mode)
+                        menu_page = 7
+                    menu_drawn = 0
+                elif key != 0:
                     menu_drawn = 0
             elif menu_page == 6:
                 if music_name_editing == 1:

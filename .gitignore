@@ -1,3 +1,5 @@
+storage/
+extension/
 build/
 __pycache__/
 *.pyc
@@ -6,3 +8,7 @@ __pycache__/
 tools/unlock_all_achievements.py
 *.img.bak
 run-tetris-os.bat
+tools/extract_tinyfs_text.py
+tinyfs-export/
+tools/install_elf.py
+tools/read_elf_log.py

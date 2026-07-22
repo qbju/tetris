@@ -14,6 +14,9 @@ started: i32 = 0
 last_key: i32 = 0
 menu_drawn: i32 = 0
 menu_page: i32 = 0
+extension_selection: i32 = 0
+extension_active: i32 = 0
+ui_transition_active: i32 = 0
 menu_selection: i32 = 0
 settings_selection: i32 = 0
 settings_page: i32 = 0
@@ -522,18 +525,42 @@ def draw_build_info() -> None:
     text(45, 13, 73, 0x3F); text(46, 13, 51, 0x3F); text(47, 13, 56, 0x3F); text(48, 13, 54, 0x3F)
     text(24, 15, 66, 0x3B); text(25, 15, 85, 0x3B); text(26, 15, 73, 0x3B); text(27, 15, 76, 0x3B); text(28, 15, 68, 0x3B)
     text(45, 15, 68, 0x3F); text(46, 15, 69, 0x3F); text(47, 15, 86, 0x3F)
+def draw_extensions() -> None:
+    draw_menu()
+    y: i32 = 5
+    while y < 21:
+        x: i32 = 14
+        while x < 66:
+            ui_put_cell(x, y, 32, 0x30)
+            x = x + 1
+        y = y + 1
+    text(31, 6, 69, 0x3F); text(32, 6, 88, 0x3F); text(33, 6, 84, 0x3F); text(34, 6, 69, 0x3F); text(35, 6, 78, 0x3F); text(36, 6, 83, 0x3F); text(37, 6, 73, 0x3F); text(38, 6, 79, 0x3F); text(39, 6, 78, 0x3F); text(40, 6, 83, 0x3F)
+    count: i32 = extension_count()
+    first: i32 = extension_selection - 4 if extension_selection >= 5 else 0
+    row_index: i32 = 0
+    while row_index < 6 and first + row_index < count:
+        identifier: i32 = first + row_index
+        row: i32 = 9 + row_index * 2
+        text(17, row, 16 if identifier == extension_selection else 32, 0x3E)
+        length: i32 = extension_name_length(identifier)
+        position: i32 = 0
+        while position < length and position < 42:
+            text(20 + position, row, extension_name_char(identifier, position), 0x3F if identifier == extension_selection else 0x37)
+            position = position + 1
+        row_index = row_index + 1
+    text(25, 22, 85, 0x37); text(26, 22, 80, 0x37); text(28, 22, 68, 0x37); text(29, 22, 79, 0x37); text(30, 22, 87, 0x37)
+    text(34, 22, 69, 0x3A); text(35, 22, 78, 0x3A); text(36, 22, 84, 0x3A); text(37, 22, 69, 0x3A); text(38, 22, 82, 0x3A)
+    text(42, 22, 69, 0x37); text(43, 22, 83, 0x37); text(44, 22, 67, 0x37); text(46, 22, 66, 0x37); text(47, 22, 65, 0x37); text(48, 22, 67, 0x37); text(49, 22, 75, 0x37)
 def draw_menu_label(item: i32, y: i32) -> None:
     colour: i32 = 0x2F if menu_selection == item else 0x1F
     if item == 0:
         text(31, y, 80, colour); text(32, y, 76, colour); text(33, y, 65, colour); text(34, y, 89, colour)
-        text(36, y, 60, colour)
         if game_mode == 0:
-            text(37, y, 69, colour); text(38, y, 78, colour); text(39, y, 68, colour); text(40, y, 76, colour); text(41, y, 69, colour); text(42, y, 83, colour); text(43, y, 83, colour)
-            text(44, y, 62, colour)
+            text(36, y, 69, colour); text(37, y, 78, colour); text(38, y, 68, colour); text(39, y, 76, colour); text(40, y, 69, colour); text(41, y, 83, colour); text(42, y, 83, colour)
         elif game_mode == 1:
-            text(36, y, 60, colour); text(37, y, 77, colour); text(38, y, 65, colour); text(39, y, 82, colour); text(40, y, 65, colour); text(41, y, 84, colour); text(42, y, 72, colour); text(43, y, 79, colour); text(44, y, 78, colour); text(45, y, 62, colour)
+            text(36, y, 77, colour); text(37, y, 65, colour); text(38, y, 82, colour); text(39, y, 65, colour); text(40, y, 84, colour); text(41, y, 72, colour); text(42, y, 79, colour); text(43, y, 78, colour)
         else:
-            text(36, y, 60, colour); text(37, y, 83, colour); text(38, y, 80, colour); text(39, y, 82, colour); text(40, y, 73, colour); text(41, y, 78, colour); text(42, y, 84, colour); text(43, y, 32, colour); text(44, y, 52, colour); text(45, y, 48, colour); text(46, y, 62, colour)
+            text(36, y, 83, colour); text(37, y, 80, colour); text(38, y, 82, colour); text(39, y, 73, colour); text(40, y, 78, colour); text(41, y, 84, colour); text(42, y, 32, colour); text(43, y, 52, colour); text(44, y, 48, colour)
     elif item == 1:
         text(35, y, 83, colour); text(36, y, 69, colour); text(37, y, 84, colour); text(38, y, 84, colour); text(39, y, 73, colour); text(40, y, 78, colour); text(41, y, 71, colour); text(42, y, 83, colour)
     elif item == 2:
@@ -544,8 +571,10 @@ def draw_menu_label(item: i32, y: i32) -> None:
         text(39, y, 83, colour); text(40, y, 84, colour); text(41, y, 73, colour); text(42, y, 67, colour); text(43, y, 83, colour)
     elif item == 4:
         text(33, y, 65, colour); text(34, y, 67, colour); text(35, y, 72, colour); text(36, y, 73, colour); text(37, y, 69, colour); text(38, y, 86, colour); text(39, y, 69, colour); text(40, y, 77, colour); text(41, y, 69, colour); text(42, y, 78, colour); text(43, y, 84, colour); text(44, y, 83, colour)
-    else:
+    elif item == 5:
         text(36, y, 71, colour); text(37, y, 76, colour); text(38, y, 73, colour); text(39, y, 84, colour); text(40, y, 67, colour); text(41, y, 72, colour)
+    else:
+        text(34, y, 69, colour); text(35, y, 88, colour); text(36, y, 84, colour); text(37, y, 69, colour); text(38, y, 78, colour); text(39, y, 83, colour); text(40, y, 73, colour); text(41, y, 79, colour); text(42, y, 78, colour)
 
 def draw_menu() -> None:
     draw_menu_shell(0)
@@ -664,35 +693,65 @@ def draw_settings() -> None:
     text(25, 21, 85, 0x07); text(26, 21, 80, 0x07); text(28, 21, 68, 0x07); text(29, 21, 79, 0x07); text(30, 21, 87, 0x07)
     text(33, 21, 76, 0x07); text(34, 21, 69, 0x07); text(35, 21, 70, 0x07); text(36, 21, 84, 0x07); text(38, 21, 82, 0x07); text(39, 21, 73, 0x07); text(40, 21, 71, 0x07); text(41, 21, 72, 0x07); text(42, 21, 84, 0x07)
 def scancode_ascii(key: i32) -> i32:
-    if key == 0x1E: return 65
-    if key == 0x30: return 66
-    if key == 0x2E: return 67
-    if key == 0x20: return 68
-    if key == 0x12: return 69
-    if key == 0x21: return 70
-    if key == 0x22: return 71
-    if key == 0x23: return 72
-    if key == 0x17: return 73
-    if key == 0x24: return 74
-    if key == 0x25: return 75
-    if key == 0x26: return 76
-    if key == 0x32: return 77
-    if key == 0x31: return 78
-    if key == 0x18: return 79
-    if key == 0x19: return 80
-    if key == 0x10: return 81
-    if key == 0x13: return 82
-    if key == 0x1F: return 83
-    if key == 0x14: return 84
-    if key == 0x16: return 85
-    if key == 0x2F: return 86
-    if key == 0x11: return 87
-    if key == 0x2D: return 88
-    if key == 0x15: return 89
-    if key == 0x2C: return 90
-    if key >= 0x02 and key <= 0x0A: return 48 + key - 1
-    if key == 0x0B: return 48
+    # US PC set-1 layout. Shift state is maintained by keyboard_scancode().
+    letter: i32 = 0
+    if key == 0x1E: letter = 65
+    elif key == 0x30: letter = 66
+    elif key == 0x2E: letter = 67
+    elif key == 0x20: letter = 68
+    elif key == 0x12: letter = 69
+    elif key == 0x21: letter = 70
+    elif key == 0x22: letter = 71
+    elif key == 0x23: letter = 72
+    elif key == 0x17: letter = 73
+    elif key == 0x24: letter = 74
+    elif key == 0x25: letter = 75
+    elif key == 0x26: letter = 76
+    elif key == 0x32: letter = 77
+    elif key == 0x31: letter = 78
+    elif key == 0x18: letter = 79
+    elif key == 0x19: letter = 80
+    elif key == 0x10: letter = 81
+    elif key == 0x13: letter = 82
+    elif key == 0x1F: letter = 83
+    elif key == 0x14: letter = 84
+    elif key == 0x16: letter = 85
+    elif key == 0x2F: letter = 86
+    elif key == 0x11: letter = 87
+    elif key == 0x2D: letter = 88
+    elif key == 0x15: letter = 89
+    elif key == 0x2C: letter = 90
+    if letter != 0:
+        if keyboard_shifted == 0: return letter + 32
+        return letter
+    if key >= 0x02 and key <= 0x0A:
+        if keyboard_shifted == 1:
+            shifted_digits: i32 = 33
+            if key == 0x03: shifted_digits = 64
+            elif key == 0x04: shifted_digits = 35
+            elif key == 0x05: shifted_digits = 36
+            elif key == 0x06: shifted_digits = 37
+            elif key == 0x07: shifted_digits = 94
+            elif key == 0x08: shifted_digits = 38
+            elif key == 0x09: shifted_digits = 42
+            elif key == 0x0A: shifted_digits = 40
+            return shifted_digits
+        return 48 + key - 1
+    if key == 0x0B: return 41 if keyboard_shifted == 1 else 48
+    if key == 0x0C: return 95 if keyboard_shifted == 1 else 45
+    if key == 0x0D: return 43 if keyboard_shifted == 1 else 61
+    if key == 0x1A: return 123 if keyboard_shifted == 1 else 91
+    if key == 0x1B: return 125 if keyboard_shifted == 1 else 93
+    if key == 0x27: return 58 if keyboard_shifted == 1 else 59
+    if key == 0x28: return 34 if keyboard_shifted == 1 else 39
+    if key == 0x29: return 126 if keyboard_shifted == 1 else 96
+    if key == 0x2B: return 124 if keyboard_shifted == 1 else 92
+    if key == 0x33: return 60 if keyboard_shifted == 1 else 44
+    if key == 0x34: return 62 if keyboard_shifted == 1 else 46
+    if key == 0x35: return 63 if keyboard_shifted == 1 else 47
+    if key == 0x39: return 32
     return 0
+
 def draw_music_editor() -> None:
     clear_screen(0x10)
     name_index: i32 = 0
