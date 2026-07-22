@@ -1,6 +1,10 @@
 from lpython import i32, ccall
 
 keyboard_shifted: i32 = 0
+keyboard_control: i32 = 0
+keyboard_repeat_key: i32 = -1
+keyboard_repeat_released: i32 = 1
+keyboard_repeat_deadline: i32 = 0
 
 # All game policy is LPython. The linked functions are hardware/render edges.
 @ccall
@@ -8,6 +12,9 @@ def vga_set_mode13() -> None:
     pass
 
 @ccall
+@ccall
+def ui_set_palette_entry(index: i32, red: i32, green: i32, blue: i32) -> None:
+    pass
 def vga_set_palette(mode: i32) -> None:
     pass
 
@@ -23,6 +30,9 @@ def ui_set_render_target(target: i32) -> None:
     pass
 
 @ccall
+@ccall
+def ui_blit_window(x: i32, y: i32, width: i32, height: i32) -> None:
+    pass
 def ui_present_diff(reveal_x: i32) -> None:
     pass
 @ccall
@@ -198,18 +208,90 @@ def rtc_seconds_of_day() -> i32:
         hour = bcd_value(hour & 0x7F)
     return hour * 3600 + minute * 60 + second
 def keyboard_scancode() -> i32:
-    global keyboard_shifted
+    global keyboard_shifted, keyboard_control, keyboard_repeat_key, keyboard_repeat_released, keyboard_repeat_deadline
     while (io_in8(0x64) & 1) != 0:
         status: i32 = io_in8(0x64)
         code: i32 = io_in8(0x60)
         if (status & 0x20) == 0 and code != 0xE0 and code != 0xE1:
             if code == 0x2A or code == 0x36:
-                keyboard_shifted = 1
-                return code
-            if code == 0xAA or code == 0xB6:
+                if keyboard_shifted == 0:
+                    keyboard_shifted = 1
+                    return code
+            elif code == 0x1D:
+                keyboard_control = 1
+            elif code == 0x9D:
+                keyboard_control = 0
+            elif code == 0xAA or code == 0xB6:
                 keyboard_shifted = 0
-            elif (code & 0x80) == 0:
-                return code
+            elif (code & 0x80) != 0:
+                released_code: i32 = code & 0x7F
+                if released_code == keyboard_repeat_key:
+                    keyboard_repeat_released = 1
+            else:
+                if code != keyboard_repeat_key or keyboard_repeat_released == 1:
+                    keyboard_repeat_key = code
+                    keyboard_repeat_released = 0
+                    keyboard_repeat_deadline = system_periods + 30
+                    return code
+                if system_periods >= keyboard_repeat_deadline:
+                    keyboard_repeat_deadline = system_periods + 6
+                    return code
+    return 0
+
+ps2_mouse_phase: i32 = 0
+ps2_mouse_first: i32 = 0
+ps2_mouse_second: i32 = 0
+
+
+def ps2_wait_write() -> None:
+    attempts: i32 = 0
+    while (io_in8(0x64) & 2) != 0 and attempts < 100000:
+        attempts = attempts + 1
+
+
+def ps2_wait_read() -> i32:
+    attempts: i32 = 0
+    while (io_in8(0x64) & 1) == 0 and attempts < 100000:
+        attempts = attempts + 1
+    if attempts >= 100000: return -1
+    return io_in8(0x60)
+
+
+def ps2_mouse_command(command: i32) -> None:
+    ps2_wait_write(); io_out8(0x64, 0xD4)
+    ps2_wait_write(); io_out8(0x60, command)
+    ps2_wait_read()
+
+
+def ps2_mouse_init() -> None:
+    global ps2_mouse_phase
+    ps2_mouse_phase = 0
+    ps2_wait_write(); io_out8(0x64, 0xA8)
+    ps2_wait_write(); io_out8(0x64, 0x20)
+    command_byte: i32 = ps2_wait_read()
+    if command_byte < 0: command_byte = 0
+    command_byte = (command_byte | 2) & 0xDF
+    ps2_wait_write(); io_out8(0x64, 0x60)
+    ps2_wait_write(); io_out8(0x60, command_byte)
+    ps2_mouse_command(0xF6)
+    ps2_mouse_command(0xF4)
+
+
+def ps2_mouse_poll() -> i32:
+    global ps2_mouse_phase, ps2_mouse_first, ps2_mouse_second
+    while (io_in8(0x64) & 0x21) == 0x21:
+        data: i32 = io_in8(0x60)
+        if ps2_mouse_phase == 0:
+            if (data & 8) != 0:
+                ps2_mouse_first = data
+                ps2_mouse_phase = 1
+        elif ps2_mouse_phase == 1:
+            ps2_mouse_second = data
+            ps2_mouse_phase = 2
+        else:
+            ps2_mouse_phase = 0
+            if (ps2_mouse_first & 0xC0) == 0:
+                return -2147483648 | (ps2_mouse_first & 7) | ((ps2_mouse_second & 255) << 8) | ((data & 255) << 16)
     return 0
 
 def pit_latch_current() -> i32:

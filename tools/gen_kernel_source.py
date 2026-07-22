@@ -33,7 +33,9 @@ def build_extension_registry(paths: list[Path]) -> str:
             lines.append(f"    {keyword} identifier == {index}:")
             for position, character in enumerate(path.name.upper().encode("ascii", "replace")):
                 lines.append(f"        if position == {position}: return {character}")
-    lines += ["    return 0", "", "def extension_draw(identifier: i32) -> None:"]
+    lines += ["    return 0", "", "def extension_window_host_id() -> i32:"]
+    window_id = next((index for index, path in enumerate(paths) if path.stem.lower() == "windowcursor"), -1)
+    lines += [f"    return {window_id}", "", "def extension_draw(identifier: i32) -> None:"]
     if paths:
         for index, path in enumerate(paths):
             keyword = "if" if index == 0 else "elif"

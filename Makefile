@@ -17,10 +17,7 @@ $(BUILD):
 $(DATA):
 	mkdir -p storage
 	test -f $@ || truncate -s 4M $@
-$(BUILD)/hello.elf: extension/hello.c extension/hello.ld | $(BUILD)
-	gcc -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -static -no-pie -Wl,--build-id=none -Wl,-T,extension/hello.ld -o $@ extension/hello.c
-
-$(BUILD)/hw.o: tools/gen_hw_object.py $(BUILD)/hello.elf | $(BUILD)
+$(BUILD)/hw.o: tools/gen_hw_object.py | $(BUILD)
 	python3 tools/gen_hw_object.py $@
 
 # Amalgamate the maintainable source fragments, then let LPython emit C.
