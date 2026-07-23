@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PARTS = ROOT / "kernel" / "parts"
 EXTENSIONS = ROOT / "extension"
 KEYBOARDS = ROOT / "kernel" / "keyboard"
+CRYPT = ROOT / "kernel" / "crypt"
+IMAGE = ROOT / "kernel" / "image"
 ORDER = (
     "00_platform.inc.py",
     "10_storage.inc.py",
@@ -27,7 +29,7 @@ def extension_permissions(path: Path) -> int:
     if not match:
         return 0
     names = {name.strip().lower() for name in re.split(r"[,\s]+", match.group(1)) if name.strip()}
-    bits = {"settings.read": 1, "settings.write": 2, "settings.save": 4, "autostart": 8, "background": 16, "events": 32, "notify": 64, "messages": 128, "storage.read": 256, "storage.write": 512, "framebuffer.native": 1024, "settings.admin": 2048}
+    bits = {"settings.read": 1, "settings.write": 2, "settings.save": 4, "autostart": 8, "background": 16, "events": 32, "notify": 64, "messages": 128, "storage.read": 256, "storage.write": 512, "framebuffer.native": 1024, "settings.admin": 2048, "crypto.hash": 4096, "crypto.encoding": 8192, "crypto.random": 16384, "crypto.symmetric": 32768, "crypto.pqc": 65536, "crypto.legacy": 131072, "image.process": 262144}
     return sum(value for name, value in bits.items() if name in names)
 
 
@@ -198,6 +200,11 @@ def main() -> None:
     chunks = ["# Generated from kernel/parts, keyboard layouts, and extension; do not edit.\n", "\n# --- generated keyboard layouts ---\n", build_keyboard_layouts()]
     for name in ORDER[:-1]:
         chunks += [f"\n# --- {name} ---\n", (PARTS / name).read_text(encoding="utf-8")]
+        if name == "00_platform.inc.py" and CRYPT.is_dir():
+            for path in sorted(CRYPT.glob("*.inc.py"), key=lambda item: item.name.lower()):
+                chunks += [f"\n# --- crypt/{path.name} ---\n", path.read_text(encoding="utf-8")]
+            for path in sorted(IMAGE.glob("*.inc.py"), key=lambda item: item.name.lower()):
+                chunks += [f"\n# --- image/{path.name} ---\n", path.read_text(encoding="utf-8")]
     extensions = sorted((path for path in EXTENSIONS.iterdir() if path.is_file() and path.suffix.lower() == ".py"), key=lambda path: path.name.lower()) if EXTENSIONS.is_dir() else []
     for path in extensions:
         chunks += [f"\n# --- extension/{path.name} ---\n", path.read_text(encoding="utf-8")]

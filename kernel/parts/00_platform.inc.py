@@ -127,6 +127,13 @@ def extension_memory_get(index: i32) -> i32:
 def extension_memory_set(index: i32, value: i32) -> None:
     pass
 @ccall
+def crypt_buffer_get(index: i32) -> i32:
+    pass
+
+@ccall
+def crypt_buffer_set(index: i32, value: i32) -> None:
+    pass
+@ccall
 def fs_buffer_get(index: i32) -> i32:
     pass
 

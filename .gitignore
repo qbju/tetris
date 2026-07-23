@@ -19,6 +19,7 @@ tinyfs-export/
 
 # Extensions are published separately at qbju/tetris-ext
 extension/
+extension/python/
 
 # Local launchers and maintenance / bridge utilities
 run-tetris-os.bat

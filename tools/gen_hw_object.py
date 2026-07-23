@@ -229,6 +229,17 @@ def build() -> bytes:
     b = ir.IRBuilder(set_fn.append_basic_block("entry"))
     b.store(set_fn.args[1], b.gep(extension_memory, [c0, set_fn.args[0]], inbounds=True))
     b.ret_void()
+    crypt_memory_type = ir.ArrayType(i32, 8192)
+    crypt_memory = ir.GlobalVariable(module, crypt_memory_type, name="crypt_memory")
+    crypt_memory.linkage = "internal"
+    crypt_memory.initializer = ir.Constant(crypt_memory_type, None)
+    get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="crypt_buffer_get")
+    b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+    b.ret(b.load(b.gep(crypt_memory, [c0, get_fn.args[0]], inbounds=True)))
+    set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="crypt_buffer_set")
+    b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+    b.store(set_fn.args[1], b.gep(crypt_memory, [c0, set_fn.args[0]], inbounds=True))
+    b.ret_void()
     buffer_type = ir.ArrayType(i32, 512)
     sector_buffer = ir.GlobalVariable(module, buffer_type, name="fs_sector_buffer")
     sector_buffer.linkage = "internal"
