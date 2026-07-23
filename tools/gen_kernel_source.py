@@ -57,6 +57,12 @@ def build_extension_registry(paths: list[Path]) -> str:
         lines.append(f"    if length == {len(name)}:")
         condition = " and ".join(f"fs_buffer_get({8 + pos}) == {char}" for pos, char in enumerate(name)) or "True"
         lines.append(f"        if {condition}: return {index}")
+    lines += ["    return -1", "", "def extension_find_memory(length: i32, offset: i32) -> i32:"]
+    for index, path in enumerate(paths):
+        name = path.name.upper().encode("ascii", "replace")
+        lines.append(f"    if length == {len(name)}:")
+        condition = " and ".join(f"(extension_memory_get(offset + {pos}) == {char} or extension_memory_get(offset + {pos}) == {char + 32 if 65 <= char <= 90 else char})" for pos, char in enumerate(name)) or "True"
+        lines.append(f"        if {condition}: return {index}")
     lines += ["    return -1", "", "def extension_window_host_id() -> i32:"]
     window_id = next((index for index, path in enumerate(paths) if path.stem.lower() == "windowcursor"), -1)
     lines += [f"    return {window_id}", ""]

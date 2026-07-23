@@ -1,14 +1,58 @@
-storage/
-extension/
+# Build products
 build/
-__pycache__/
-*.pyc
+*.o
+*.obj
+*.elf
+*.iso
+*.map
+compile_commands.json
 
-# Local TinyFS cheat utility (intentionally not published)
-tools/unlock_all_achievements.py
+# LPython / generated intermediate sources
+main__tmp__generated__.c
+*__tmp__generated__.c
+
+# Runtime data and local exports
+storage/
+*.img
 *.img.bak
-run-tetris-os.bat
-tools/extract_tinyfs_text.py
 tinyfs-export/
+
+# Extensions are published separately at qbju/tetris-ext
+extension/
+
+# Local launchers and maintenance / bridge utilities
+run-tetris-os.bat
+tools/unlock_all_achievements.py
+tools/extract_tinyfs_text.py
 tools/install_elf.py
 tools/read_elf_log.py
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Logs, crash dumps, and temporary files
+*.log
+*.tmp
+*.dmp
+*.core
+qemu-*.log
+
+# Local configuration and editor metadata
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
