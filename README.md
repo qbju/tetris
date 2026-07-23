@@ -115,9 +115,12 @@ VNCクライアントから`127.0.0.1:5900`へ接続します。VNC経由ではP
 
 設定で矢印操作とWASD操作を切り替えられます。
 
-## CLIとForth
+## CLIとForth（拡張機能が必要）
 
-CLIにはファイル・ディレクトリ操作、システム情報、ELF実行などのコマンドがあります。TinyFS上のForthソースは、OS内でi386 ELF32へコンパイルできます。
+> [!IMPORTANT]
+> この節のCLI、ELFランナー、`EDIT`、`FORTHC`はOS本体だけでは利用できません。[qbju/tetris-ext](https://github.com/qbju/tetris-ext)で公開しているELFRUNNER/FORTHC拡張を導入したビルドが必要です。
+
+拡張導入後は、ファイル・ディレクトリ操作、システム情報、ELF実行などのCLIコマンドを利用できます。TinyFS上のForthソースは、OS内でi386 ELF32へコンパイルできます。
 
 ```text
 EDIT TEST.FTH
