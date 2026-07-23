@@ -842,7 +842,7 @@ def draw_music_editor() -> None:
         note_colour: i32 = 0x0E if note_index == music_editor_note else 0x0F
         note_duration: i32 = (packed_note >> 16) & 0xFFFF
         if (note_duration & 0x8000) == 0: ui_put_cell(note_x, note_y, 14, note_colour)
-        if note_index == music_editor_note: ui_put_cell(note_x, 19, 30, 0x0E)
+        if note_index == music_editor_note: ui_put_cell(note_x, 20, 30, 0x0E)
         note_index = note_index + 1
     text(8, 21, 65, 0x0B); text(9, 21, 82, 0x0B); text(10, 21, 82, 0x0B); text(11, 21, 79, 0x0B); text(12, 21, 87, 0x0B); text(13, 21, 83, 0x0B)
     text(15, 21, 77, 0x07); text(16, 21, 79, 0x07); text(17, 21, 86, 0x07); text(18, 21, 69, 0x07)
@@ -936,4 +936,3 @@ def draw_statistics() -> None:
     put_number_coloured(total_pieces, 48, 15, 0x3F)
     text(31, 18, 69, 0x3F); text(32, 18, 78, 0x3F); text(33, 18, 84, 0x3F); text(34, 18, 69, 0x3F); text(35, 18, 82, 0x3F)
     text(37, 18, 79, 0x3F); text(38, 18, 82, 0x3F); text(40, 18, 69, 0x3F); text(41, 18, 83, 0x3F); text(42, 18, 67, 0x3F)
-

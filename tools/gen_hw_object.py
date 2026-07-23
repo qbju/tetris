@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from pathlib import Path
 from llvmlite import binding, ir
 
 
@@ -239,6 +240,51 @@ def build() -> bytes:
     set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="crypt_buffer_set")
     b = ir.IRBuilder(set_fn.append_basic_block("entry"))
     b.store(set_fn.args[1], b.gep(crypt_memory, [c0, set_fn.args[0]], inbounds=True))
+    b.ret_void()
+    demo_gif_path = Path(__file__).resolve().parents[1] / "smallplay.gif"
+    demo_gif_bytes = demo_gif_path.read_bytes() if demo_gif_path.exists() else b""
+    demo_gif_type = ir.ArrayType(i8, max(1, len(demo_gif_bytes)))
+    demo_gif = ir.GlobalVariable(module, demo_gif_type, name="builtin_smallplay_gif")
+    demo_gif.linkage = "internal"
+    demo_gif.initializer = ir.Constant(demo_gif_type, bytearray(demo_gif_bytes if demo_gif_bytes else b"\0"))
+    demo_size_fn = ir.Function(module, ir.FunctionType(i32, []), name="builtin_gif_size")
+    b = ir.IRBuilder(demo_size_fn.append_basic_block("entry"))
+    b.ret(ir.Constant(i32, len(demo_gif_bytes)))
+    demo_get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="builtin_gif_get")
+    b = ir.IRBuilder(demo_get_fn.append_basic_block("entry"))
+    b.ret(b.zext(b.load(b.gep(demo_gif, [c0, demo_get_fn.args[0]], inbounds=True)), i32))
+    gif_input_type = ir.ArrayType(i32, 1048576)
+    gif_input = ir.GlobalVariable(module, gif_input_type, name="gif_input")
+    gif_input.linkage = "internal"
+    gif_input.initializer = ir.Constant(gif_input_type, None)
+    gif_dictionary_type = ir.ArrayType(i32, 4096)
+    gif_prefix = ir.GlobalVariable(module, gif_dictionary_type, name="gif_prefix")
+    gif_prefix.linkage = "internal"
+    gif_prefix.initializer = ir.Constant(gif_dictionary_type, None)
+    gif_suffix = ir.GlobalVariable(module, gif_dictionary_type, name="gif_suffix")
+    gif_suffix.linkage = "internal"
+    gif_suffix.initializer = ir.Constant(gif_dictionary_type, None)
+    gif_stack = ir.GlobalVariable(module, gif_dictionary_type, name="gif_stack")
+    gif_stack.linkage = "internal"
+    gif_stack.initializer = ir.Constant(gif_dictionary_type, None)
+    for name, memory, write in [("gif_input", gif_input, True), ("gif_prefix", gif_prefix, True), ("gif_suffix", gif_suffix, True), ("gif_stack", gif_stack, True)]:
+        get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name=name + "_get")
+        b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+        b.ret(b.load(b.gep(memory, [c0, get_fn.args[0]], inbounds=True)))
+        set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name=name + "_set")
+        b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+        b.store(set_fn.args[1], b.gep(memory, [c0, set_fn.args[0]], inbounds=True))
+        b.ret_void()
+    image_memory_type = ir.ArrayType(i32, 65536)
+    image_memory = ir.GlobalVariable(module, image_memory_type, name="image_memory")
+    image_memory.linkage = "internal"
+    image_memory.initializer = ir.Constant(image_memory_type, None)
+    get_fn = ir.Function(module, ir.FunctionType(i32, [i32]), name="image_buffer_get")
+    b = ir.IRBuilder(get_fn.append_basic_block("entry"))
+    b.ret(b.load(b.gep(image_memory, [c0, get_fn.args[0]], inbounds=True)))
+    set_fn = ir.Function(module, ir.FunctionType(void, [i32, i32]), name="image_buffer_set")
+    b = ir.IRBuilder(set_fn.append_basic_block("entry"))
+    b.store(set_fn.args[1], b.gep(image_memory, [c0, set_fn.args[0]], inbounds=True))
     b.ret_void()
     buffer_type = ir.ArrayType(i32, 512)
     sector_buffer = ir.GlobalVariable(module, buffer_type, name="fs_sector_buffer")

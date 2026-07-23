@@ -134,6 +134,52 @@ def crypt_buffer_get(index: i32) -> i32:
 def crypt_buffer_set(index: i32, value: i32) -> None:
     pass
 @ccall
+def builtin_gif_size() -> i32:
+    pass
+
+@ccall
+def builtin_gif_get(index: i32) -> i32:
+    pass
+
+@ccall
+def gif_input_get(index: i32) -> i32:
+    pass
+
+@ccall
+def gif_input_set(index: i32, value: i32) -> None:
+    pass
+
+@ccall
+def gif_prefix_get(index: i32) -> i32:
+    pass
+
+@ccall
+def gif_prefix_set(index: i32, value: i32) -> None:
+    pass
+
+@ccall
+def gif_suffix_get(index: i32) -> i32:
+    pass
+
+@ccall
+def gif_suffix_set(index: i32, value: i32) -> None:
+    pass
+
+@ccall
+def gif_stack_get(index: i32) -> i32:
+    pass
+
+@ccall
+def gif_stack_set(index: i32, value: i32) -> None:
+    pass
+@ccall
+def image_buffer_get(index: i32) -> i32:
+    pass
+
+@ccall
+def image_buffer_set(index: i32, value: i32) -> None:
+    pass
+@ccall
 def fs_buffer_get(index: i32) -> i32:
     pass
 
@@ -546,6 +592,8 @@ def kalinka_duration(index: i32) -> i32:
     if step == 15: return 10
     return 20
 def pitch_divisor(pitch: i32) -> i32:
+    if pitch == -2: return 2280
+    if pitch == -1: return 2032
     if pitch == 0: return 1810
     if pitch == 1: return 1612
     if pitch == 2: return 1436
@@ -555,13 +603,15 @@ def pitch_divisor(pitch: i32) -> i32:
     if pitch == 6: return 1016
     if pitch == 7: return 905
     if pitch == 8: return 854
-    return 761
+    if pitch == 9: return 761
+    if pitch == 10: return 718
+    return 640
 
 def divisor_pitch(divisor: i32) -> i32:
-    pitch: i32 = 0
+    pitch: i32 = -2
     best_pitch: i32 = 0
     best_distance: i32 = 100000
-    while pitch < 10:
+    while pitch < 12:
         distance: i32 = pitch_divisor(pitch) - divisor
         if distance < 0: distance = -distance
         if distance < best_distance:

@@ -323,8 +323,8 @@ def kernel_main() -> None:
                 elif key == 0x48 or key == 0x50:
                     editor_note: i32 = any_note_get(music_editor_note)
                     editor_pitch: i32 = divisor_pitch(editor_note & 0xFFFF)
-                    if key == 0x48 and editor_pitch < 9: editor_pitch = editor_pitch + 1
-                    if key == 0x50 and editor_pitch > 0: editor_pitch = editor_pitch - 1
+                    if key == 0x48 and editor_pitch < 11: editor_pitch = editor_pitch + 1
+                    if key == 0x50 and editor_pitch > -2: editor_pitch = editor_pitch - 1
                     any_note_set(music_editor_note, pitch_divisor(editor_pitch) | (editor_note & 0xFFFF0000))
                     menu_drawn = 0
                 elif key >= 0x02 and key <= 0x05:
@@ -416,8 +416,7 @@ def kernel_main() -> None:
                 if not fits(piece_x, piece_y + 1, rotation):
                     grounded = 1
                     pit_reset_elapsed()
-            if move_ready() and key == rotate_code and fits(piece_x, piece_y, (rotation + 1) % 4):
-                rotation = (rotation + 1) % 4
+            if move_ready() and key == rotate_code and try_rotate_clockwise() == 1:
                 last_action_rotation = 1
                 sound_tone(1356, 1)
                 arm_move_cooldown(15)

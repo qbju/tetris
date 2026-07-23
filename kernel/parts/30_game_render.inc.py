@@ -33,6 +33,68 @@ def fits(nx: i32, ny: i32, nr: i32) -> bool:
         cell = cell + 1
     return True
 
+def srs_kick_x(piece_kind: i32, old_rotation: i32, test: i32) -> i32:
+    if test == 0 or piece_kind == 1: return 0
+    if piece_kind == 0:
+        if old_rotation == 0:
+            if test == 1: return -2
+            if test == 2: return 1
+            if test == 3: return -2
+            return 1
+        if old_rotation == 1:
+            if test == 1: return -1
+            if test == 2: return 2
+            if test == 3: return -1
+            return 2
+        if old_rotation == 2:
+            if test == 1: return 2
+            if test == 2: return -1
+            if test == 3: return 2
+            return -1
+        if test == 1: return 1
+        if test == 2: return -2
+        if test == 3: return 1
+        return -2
+    if old_rotation == 0:
+        if test == 1 or test == 2 or test == 4: return -1
+        return 0
+    if old_rotation == 1:
+        if test == 1 or test == 2 or test == 4: return 1
+        return 0
+    if old_rotation == 2:
+        if test == 1 or test == 2 or test == 4: return 1
+        return 0
+    if test == 1 or test == 2 or test == 4: return -1
+    return 0
+
+def srs_kick_y(piece_kind: i32, old_rotation: i32, test: i32) -> i32:
+    if test == 0 or test == 1 or piece_kind == 1: return 0
+    if piece_kind == 0:
+        if test == 2: return 0
+        if old_rotation == 0: return 1 if test == 3 else -2
+        if old_rotation == 1: return -2 if test == 3 else 1
+        if old_rotation == 2: return -1 if test == 3 else 2
+        return 2 if test == 3 else -1
+    if old_rotation == 0: return -1 if test == 2 else 2
+    if old_rotation == 1: return -1 if test == 2 else 2
+    if old_rotation == 2: return 1 if test == 2 else -2
+    return 1 if test == 2 else -2
+
+def try_rotate_clockwise() -> i32:
+    global piece_x, piece_y, rotation
+    next_rotation: i32 = (rotation + 1) % 4
+    test: i32 = 0
+    while test < 5:
+        kick_x: i32 = srs_kick_x(kind, rotation, test)
+        kick_y: i32 = srs_kick_y(kind, rotation, test)
+        if fits(piece_x + kick_x, piece_y + kick_y, next_rotation):
+            piece_x = piece_x + kick_x
+            piece_y = piece_y + kick_y
+            rotation = next_rotation
+            return 1
+        test = test + 1
+    return 0
+
 def is_t_spin() -> bool:
     if kind != 2 or last_action_rotation == 0: return False
     center_x: i32 = piece_x + 1
