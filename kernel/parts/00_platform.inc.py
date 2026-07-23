@@ -162,6 +162,7 @@ fs_ready: i32 = 0
 color_mode: i32 = 0
 gravity_periods: i32 = 50
 control_mode: i32 = 0
+keyboard_layout: i32 = 0
 bgm_volume: i32 = 6
 se_volume: i32 = 5
 debug_enabled: i32 = 1

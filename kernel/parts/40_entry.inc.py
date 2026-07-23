@@ -41,7 +41,7 @@ def update_ui_transition() -> None:
     if reveal >= 320: ui_transition_active = 0
 
 def kernel_main() -> None:
-    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length, extension_selection, extension_active, ui_transition_active, extension_notification_source, extension_notification_dirty, extension_redraw_requested
+    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, keyboard_layout, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length, extension_selection, extension_active, ui_transition_active, extension_notification_source, extension_notification_dirty, extension_redraw_requested
     vga_set_mode13()
     cell: i32 = 0
     while cell < 240:
@@ -162,10 +162,10 @@ def kernel_main() -> None:
                         menu_drawn = 0
             elif menu_page == 1:
                 if key == 0x48:
-                    settings_selection = (settings_selection + 3) % 4
+                    settings_selection = (3 if settings_selection == 0 else 0) if settings_page == 3 else (settings_selection + 3) % 4
                     menu_drawn = 0
                 elif key == 0x50:
-                    settings_selection = (settings_selection + 1) % 4
+                    settings_selection = (3 if settings_selection == 0 else 0) if settings_page == 3 else (settings_selection + 1) % 4
                     menu_drawn = 0
                 elif key == 0x4B or key == 0x4D:
                     direction: i32 = -1 if key == 0x4B else 1
@@ -192,7 +192,7 @@ def kernel_main() -> None:
                         elif settings_selection == 2:
                             debug_enabled = 1 - debug_enabled
                             if debug_enabled == 0: debug_visible = 0
-                    else:
+                    elif settings_page == 2:
                         if settings_selection == 0:
                             candidate_music: i32 = music_mode
                             music_attempt: i32 = 0
@@ -207,6 +207,8 @@ def kernel_main() -> None:
                             clock_enabled = 1 - clock_enabled
                         elif settings_selection == 2:
                             ghost_enabled = 1 - ghost_enabled
+                    else:
+                        if settings_selection == 0: keyboard_layout = (keyboard_layout + direction + keyboard_layout_count()) % keyboard_layout_count()
                     menu_drawn = 0
                 elif key == 0x1C:
                     if settings_page == 2 and settings_selection == 0 and music_mode == 2 and non_hidden_achievement_count() >= 19:
@@ -214,12 +216,15 @@ def kernel_main() -> None:
                         music_name_editing = 0
                         menu_page = 6
                         menu_drawn = 0
+                    elif settings_page == 3 and settings_selection == 0:
+                        settings_selection = 3
+                        menu_drawn = 0
                     elif settings_selection < 3:
                         settings_selection = settings_selection + 1
                         menu_drawn = 0
                     else:
                         has_reward_page: i32 = 1
-                        if settings_page == 0 or (settings_page == 1 and has_reward_page == 1):
+                        if settings_page < 3:
                             settings_page = settings_page + 1
                             settings_selection = 0
                             menu_drawn = 0

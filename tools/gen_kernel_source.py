@@ -7,6 +7,7 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 PARTS = ROOT / "kernel" / "parts"
 EXTENSIONS = ROOT / "extension"
+KEYBOARDS = ROOT / "kernel" / "keyboard"
 ORDER = (
     "00_platform.inc.py",
     "10_storage.inc.py",
@@ -143,11 +144,58 @@ def build_extension_registry(paths: list[Path]) -> str:
     lines.append(f"    return {transition}_transition_step()" if transition else "    return 320")
     lines += [""]
     return "\n".join(lines)
+def build_keyboard_layouts() -> str:
+    paths = sorted(KEYBOARDS.glob("*.keyboard"), key=lambda path: path.name.lower())
+    if not paths:
+        raise SystemExit("kernel/keyboard must contain at least one .keyboard file")
+    layouts = []
+    for path in paths:
+        name = path.stem.upper()
+        mapping = {}
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                raise SystemExit(f"{path}:{number}: expected key=value")
+            key, value = (part.strip() for part in line.split("=", 1))
+            if key.lower() == "name":
+                name = value.upper()
+                continue
+            try:
+                scan = int(key, 16)
+                normal_text, shifted_text = (part.strip() for part in value.split(",", 1))
+                normal, shifted = int(normal_text), int(shifted_text)
+            except ValueError as error:
+                raise SystemExit(f"{path}:{number}: invalid scancode or ASCII pair") from error
+            if not (0 <= scan <= 255 and 0 <= normal <= 255 and 0 <= shifted <= 255):
+                raise SystemExit(f"{path}:{number}: values must be bytes")
+            mapping[scan] = (normal, shifted)
+        encoded = name.encode("ascii", "strict")
+        if not 1 <= len(encoded) <= 12:
+            raise SystemExit(f"{path}: name must be 1..12 ASCII characters")
+        layouts.append((name, mapping))
+    lines = [f"keyboard_layout_count_value: i32 = {len(layouts)}", "", "def keyboard_layout_count() -> i32:", "    return keyboard_layout_count_value", "", "def keyboard_layout_name_length(layout: i32) -> i32:"]
+    for index, (name, _) in enumerate(layouts):
+        lines.append(f"    {'if' if index == 0 else 'elif'} layout == {index}: return {len(name)}")
+    lines += ["    return 0", "", "def keyboard_layout_name_char(layout: i32, position: i32) -> i32:"]
+    for index, (name, _) in enumerate(layouts):
+        lines.append(f"    {'if' if index == 0 else 'elif'} layout == {index}:")
+        for position, character in enumerate(name.encode("ascii")):
+            lines.append(f"        if position == {position}: return {character}")
+    lines += ["    return 0", "", "def keyboard_layout_ascii(layout: i32, key: i32, shifted: i32) -> i32:"]
+    for index, (_, mapping) in enumerate(layouts):
+        lines.append(f"    {'if' if index == 0 else 'elif'} layout == {index}:")
+        for scan, (normal, shift) in sorted(mapping.items()):
+            lines.append(f"        if key == {scan}: return {shift} if shifted == 1 else {normal}")
+    lines += ["    return 0", ""]
+    return "\n".join(lines)
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: gen_kernel_source.py OUTPUT")
     output = Path(sys.argv[1])
-    chunks = ["# Generated from kernel/parts and extension; do not edit.\n"]
+    chunks = ["# Generated from kernel/parts, keyboard layouts, and extension; do not edit.\n", "\n# --- generated keyboard layouts ---\n", build_keyboard_layouts()]
     for name in ORDER[:-1]:
         chunks += [f"\n# --- {name} ---\n", (PARTS / name).read_text(encoding="utf-8")]
     extensions = sorted((path for path in EXTENSIONS.iterdir() if path.is_file() and path.suffix.lower() == ".py"), key=lambda path: path.name.lower()) if EXTENSIONS.is_dir() else []

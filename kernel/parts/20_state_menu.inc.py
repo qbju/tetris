@@ -690,7 +690,7 @@ def draw_setting_value(value: i32, x: i32, y: i32) -> None:
 def draw_settings() -> None:
     draw_menu_shell(1)
     text(34, 4, 80, 0x0E); text(35, 4, 65, 0x0E); text(36, 4, 71, 0x0E); text(37, 4, 69, 0x0E)
-    text(39, 4, 49 + settings_page, 0x0F); text(40, 4, 47, 0x07); text(41, 4, 51, 0x0F)
+    text(39, 4, 49 + settings_page, 0x0F); text(40, 4, 47, 0x07); text(41, 4, 52, 0x0F)
     cursor_y: i32 = 6 + settings_selection * 3 if settings_selection < 3 else 17
     text(20, cursor_y, 16, 0x0E)
     if settings_page == 0:
@@ -731,7 +731,7 @@ def draw_settings() -> None:
         else:
             text(43, 12, 79, 0x08); text(44, 12, 70, 0x08); text(45, 12, 70, 0x08)
         text(34, 17, 83, 0x0A); text(35, 17, 65, 0x0A); text(36, 17, 86, 0x0A); text(37, 17, 69, 0x0A); text(39, 17, 66, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 67, 0x0A); text(42, 17, 75, 0x0A)
-    else:
+    elif settings_page == 2:
         # Achievement reward settings page.
         text(24, 6, 77, 0x0B); text(25, 6, 85, 0x0B); text(26, 6, 83, 0x0B); text(27, 6, 73, 0x0B); text(28, 6, 67, 0x0B)
         if music_mode == 0:
@@ -758,12 +758,21 @@ def draw_settings() -> None:
         else:
             text(43, 12, 79, 0x08); text(44, 12, 70, 0x08); text(45, 12, 70, 0x08)
         text(34, 17, 83, 0x0A); text(35, 17, 65, 0x0A); text(36, 17, 86, 0x0A); text(37, 17, 69, 0x0A); text(39, 17, 66, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 67, 0x0A); text(42, 17, 75, 0x0A)
+    else:
+        # Keyboard layout page. 0 = Japanese 109/JIS, 1 = US ANSI.
+        text(24, 6, 75, 0x0B); text(25, 6, 69, 0x0B); text(26, 6, 89, 0x0B); text(27, 6, 66, 0x0B); text(28, 6, 79, 0x0B); text(29, 6, 65, 0x0B); text(30, 6, 82, 0x0B); text(31, 6, 68, 0x0B)
+        layout_name_length: i32 = keyboard_layout_name_length(keyboard_layout)
+        layout_name_x: i32 = 46 - layout_name_length
+        layout_name_index: i32 = 0
+        while layout_name_index < layout_name_length:
+            text(layout_name_x + layout_name_index, 6, keyboard_layout_name_char(keyboard_layout, layout_name_index), 0x0F)
+            layout_name_index = layout_name_index + 1
     footer_x: i32 = 30
     while footer_x < 50:
         ui_put_cell(footer_x, 17, 32, 0x10)
         footer_x = footer_x + 1
     has_reward_page: i32 = 1
-    if settings_page == 0 or (settings_page == 1 and has_reward_page == 1):
+    if settings_page < 3:
         text(34, 17, 78, 0x0A); text(35, 17, 69, 0x0A); text(36, 17, 88, 0x0A); text(37, 17, 84, 0x0A)
         text(39, 17, 80, 0x0A); text(40, 17, 65, 0x0A); text(41, 17, 71, 0x0A); text(42, 17, 69, 0x0A)
     else:
@@ -772,7 +781,7 @@ def draw_settings() -> None:
     text(25, 21, 85, 0x07); text(26, 21, 80, 0x07); text(28, 21, 68, 0x07); text(29, 21, 79, 0x07); text(30, 21, 87, 0x07)
     text(33, 21, 76, 0x07); text(34, 21, 69, 0x07); text(35, 21, 70, 0x07); text(36, 21, 84, 0x07); text(38, 21, 82, 0x07); text(39, 21, 73, 0x07); text(40, 21, 71, 0x07); text(41, 21, 72, 0x07); text(42, 21, 84, 0x07)
 def scancode_ascii(key: i32) -> i32:
-    # US PC set-1 layout. Shift state is maintained by keyboard_scancode().
+    # Selectable JIS/US PC set-1 layout. Shift state is maintained by keyboard_scancode().
     letter: i32 = 0
     if key == 0x1E: letter = 65
     elif key == 0x30: letter = 66
@@ -803,32 +812,8 @@ def scancode_ascii(key: i32) -> i32:
     if letter != 0:
         if keyboard_shifted == 0: return letter + 32
         return letter
-    if key >= 0x02 and key <= 0x0A:
-        if keyboard_shifted == 1:
-            shifted_digits: i32 = 33
-            if key == 0x03: shifted_digits = 64
-            elif key == 0x04: shifted_digits = 35
-            elif key == 0x05: shifted_digits = 36
-            elif key == 0x06: shifted_digits = 37
-            elif key == 0x07: shifted_digits = 94
-            elif key == 0x08: shifted_digits = 38
-            elif key == 0x09: shifted_digits = 42
-            elif key == 0x0A: shifted_digits = 40
-            return shifted_digits
-        return 48 + key - 1
-    if key == 0x0B: return 41 if keyboard_shifted == 1 else 48
-    if key == 0x0C: return 95 if keyboard_shifted == 1 else 45
-    if key == 0x0D: return 43 if keyboard_shifted == 1 else 61
-    if key == 0x1A: return 123 if keyboard_shifted == 1 else 91
-    if key == 0x1B: return 125 if keyboard_shifted == 1 else 93
-    if key == 0x27: return 58 if keyboard_shifted == 1 else 59
-    if key == 0x28: return 34 if keyboard_shifted == 1 else 39
-    if key == 0x29: return 126 if keyboard_shifted == 1 else 96
-    if key == 0x2B: return 124 if keyboard_shifted == 1 else 92
-    if key == 0x33: return 60 if keyboard_shifted == 1 else 44
-    if key == 0x34: return 62 if keyboard_shifted == 1 else 46
-    if key == 0x35: return 63 if keyboard_shifted == 1 else 47
-    if key == 0x39: return 32
+    mapped: i32 = keyboard_layout_ascii(keyboard_layout, key, keyboard_shifted)
+    if mapped != 0: return mapped
     return 0
 
 def draw_music_editor() -> None:
@@ -951,3 +936,4 @@ def draw_statistics() -> None:
     put_number_coloured(total_pieces, 48, 15, 0x3F)
     text(31, 18, 69, 0x3F); text(32, 18, 78, 0x3F); text(33, 18, 84, 0x3F); text(34, 18, 69, 0x3F); text(35, 18, 82, 0x3F)
     text(37, 18, 79, 0x3F); text(38, 18, 82, 0x3F); text(40, 18, 69, 0x3F); text(41, 18, 83, 0x3F); text(42, 18, 67, 0x3F)
+
