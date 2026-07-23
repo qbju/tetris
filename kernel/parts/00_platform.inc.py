@@ -5,6 +5,7 @@ keyboard_control: i32 = 0
 keyboard_repeat_key: i32 = -1
 keyboard_repeat_released: i32 = 1
 keyboard_repeat_deadline: i32 = 0
+boot_safe_mode: i32 = 0
 
 # All game policy is LPython. The linked functions are hardware/render edges.
 @ccall
@@ -18,6 +19,39 @@ def ui_set_palette_entry(index: i32, red: i32, green: i32, blue: i32) -> None:
 def vga_set_palette(mode: i32) -> None:
     pass
 
+@ccall
+def ui_native_plot(x: i32, y: i32, colour: i32) -> None:
+    pass
+
+@ccall
+def ui_native_fill_rect(x: i32, y: i32, width: i32, height: i32, colour: i32) -> None:
+    pass
+
+@ccall
+def ui_native_restore_surface() -> None:
+    pass
+
+@ccall
+def ui_native_begin() -> None:
+    pass
+
+@ccall
+def ui_native_end() -> None:
+    pass
+
+@ccall
+def ui_native_blit_child(x: i32, y: i32) -> None:
+    pass
+@ccall
+def ui_native_put_cell(x: i32, y: i32, glyph: i32, colour: i32) -> None:
+    pass
+@ccall
+def ui_letterbox_fill_rect(x: i32, y: i32, width: i32, height: i32, colour: i32) -> None:
+    pass
+
+@ccall
+def ui_letterbox_put_cell(x: i32, y: i32, glyph: i32, colour: i32) -> None:
+    pass
 @ccall
 def ui_put_cell(x: i32, y: i32, glyph: i32, colour: i32) -> None:
     pass
@@ -141,6 +175,16 @@ music_name_editing: i32 = 0
 music_name_length: i32 = 3
 settings_generation: i32 = 0
 settings_slot: i32 = 0
+# The generated registry sets these only while an extension callback runs.
+extension_current_id: i32 = -1
+extension_current_permissions: i32 = 0
+extension_background_mask: i32 = 0
+extension_notification_source: i32 = -1
+extension_notification_length: i32 = 0
+extension_notification_colour: i32 = 0x3F
+extension_notification_until: i32 = 0
+extension_notification_dirty: i32 = 0
+extension_redraw_requested: i32 = 0
 max_combo: i32 = 0
 combo_generation: i32 = 0
 combo_slot: i32 = 0
@@ -186,6 +230,98 @@ se_duration_2: i32 = 0
 bag_index: i32 = 7
 last_bag_kind: i32 = -1
 rng_state: i32 = 1
+
+# Extension runtime capability helpers. The generated dispatcher supplies the
+# current extension identity and restores it across nested calls.
+def extension_request_redraw() -> None:
+    global extension_redraw_requested
+    extension_redraw_requested = 1
+
+def extension_background_set(enabled: i32) -> i32:
+    global extension_background_mask
+    if extension_current_id < 0 or (extension_current_permissions & 16) == 0: return -1
+    bit: i32 = 1 << extension_current_id
+    if enabled != 0: extension_background_mask = extension_background_mask | bit
+    else: extension_background_mask = extension_background_mask & (0 - bit - 1)
+    return 0
+
+
+def extension_notification_char_set(position: i32, character: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 64) == 0: return -1
+    if position < 0 or position >= 16: return -2
+    extension_memory_set(960 + position, character & 255)
+    return 0
+
+
+def extension_notification_show_text(message: str, colour: i32, duration: i32) -> i32:
+    length: i32 = len(message)
+    if length > 16: length = 16
+    index: i32 = 0
+    while index < length:
+        if extension_notification_char_set(index, ord(message[index])) != 0: return -1
+        index = index + 1
+    return extension_notification_show(length, colour, duration)
+
+def extension_notification_show(length: i32, colour: i32, duration: i32) -> i32:
+    global extension_notification_source, extension_notification_length, extension_notification_colour, extension_notification_until, extension_notification_dirty
+    if extension_current_id < 0 or (extension_current_permissions & 64) == 0: return -1
+    if length < 0 or length > 16 or colour < 0 or colour > 255: return -2
+    display_duration: i32 = duration
+    if display_duration < 1: display_duration = 1
+    if display_duration > 3000: display_duration = 3000
+    index: i32 = 0
+    while index < length:
+        extension_memory_set(976 + index, extension_memory_get(960 + index))
+        index = index + 1
+    extension_notification_source = extension_current_id
+    extension_notification_length = length
+    extension_notification_colour = colour
+    extension_notification_until = system_periods + display_duration
+    extension_notification_dirty = 1
+    return 0
+
+def extension_find(name: str) -> i32:
+    wanted_length: i32 = len(name)
+    identifier: i32 = 0
+    while identifier < extension_count():
+        same: bool = extension_name_length(identifier) == wanted_length
+        position: i32 = 0
+        while same and position < wanted_length:
+            character: i32 = ord(name[position])
+            if character >= 97 and character <= 122: character = character - 32
+            if extension_name_char(identifier, position) != character: same = False
+            position = position + 1
+        if same: return identifier
+        identifier = identifier + 1
+    return -1
+
+
+def extension_send_message_named(name: str, topic: i32, value: i32) -> i32:
+    target: i32 = extension_find(name)
+    if target < 0: return -2
+    return extension_send_message(target, topic, value)
+
+
+def extension_now_ms() -> i32:
+    return system_periods * 10
+
+
+def extension_mouse_buttons(packet: i32) -> i32:
+    return packet & 7
+
+
+def extension_mouse_dx(packet: i32) -> i32:
+    value: i32 = (packet >> 8) & 255
+    return value - 256 if value >= 128 else value
+
+
+def extension_mouse_dy(packet: i32) -> i32:
+    value: i32 = (packet >> 16) & 255
+    return value - 256 if value >= 128 else value
+
+
+def extension_play_pitch(pitch: i32, duration: i32) -> None:
+    sound_tone(pitch_divisor(pitch), duration)
 
 def rtc_read(register: i32) -> i32:
     io_out8(0x70, register)

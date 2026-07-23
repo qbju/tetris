@@ -6,17 +6,17 @@ LPYTHON_INC := /opt/conda/share/lpython/lib/impure
 KERNEL_PARTS := $(wildcard kernel/parts/*.inc.py)
 EXTENSIONS := $(wildcard extension/*.py extension/*.PY)
 
-.PHONY: all run clean
-all: $(ISO) $(DATA)
+.PHONY: all run clean data-size
+all: $(ISO) data-size
 
 $(BUILD):
 	mkdir -p $(BUILD)
 
 # CPython + llvmlite produces an ELF object containing the hot framebuffer
 # primitive. This is deliberately a build-time tool, never part of the OS.
-$(DATA):
+data-size:
 	mkdir -p storage
-	test -f $@ || truncate -s 4M $@
+	truncate -s 16M $(DATA)
 $(BUILD)/hw.o: tools/gen_hw_object.py | $(BUILD)
 	python3 tools/gen_hw_object.py $@
 
@@ -42,7 +42,7 @@ $(ISO): $(KERNEL) grub/grub.cfg
 	cp grub/grub.cfg $(BUILD)/iso/boot/grub/grub.cfg
 	grub-mkrescue -o $@ $(BUILD)/iso
 
-run: $(ISO) $(DATA)
+run: $(ISO) data-size
 	qemu-system-x86_64 -cdrom $(ISO) -drive file=$(DATA),format=raw,if=ide,index=0 -serial stdio
 
 clean:

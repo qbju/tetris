@@ -56,6 +56,63 @@ def text(x: i32, y: i32, value: i32, colour: i32) -> None:
         attribute = colour | 0x10
     ui_put_cell(x, y, value, attribute)
 
+def extension_draw_text(x: i32, y: i32, message: str, colour: i32) -> i32:
+    length: i32 = len(message)
+    available: i32 = 80 - x
+    draw_length: i32 = length if length < available else available
+    if x < 0 or y < 0 or y >= 25 or available <= 0: return 0
+    index: i32 = 0
+    while index < draw_length:
+        text(x + index, y, ord(message[index]), colour)
+        index = index + 1
+    return draw_length
+
+
+def extension_draw_text_centered(y: i32, message: str, colour: i32) -> i32:
+    length: i32 = len(message)
+    visible_length: i32 = length if length <= 80 else 80
+    return extension_draw_text((80 - visible_length) // 2, y, message, colour)
+
+def extension_native_fill_rect(x: i32, y: i32, width: i32, height: i32, colour: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 1024) == 0: return -1
+    ui_native_fill_rect(x, y, width, height, colour)
+    return 0
+
+
+def extension_native_draw_text(x: i32, y: i32, message: str, colour: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 1024) == 0: return -1
+    length: i32 = len(message)
+    available: i32 = (640 - x) // 8
+    draw_length: i32 = length if length < available else available
+    if x < 0 or y < 0 or y >= 480 or available <= 0: return 0
+    index: i32 = 0
+    while index < draw_length:
+        ui_native_put_cell(x + index * 8, y, ord(message[index]), colour)
+        index = index + 1
+    return draw_length
+
+def extension_letterbox_fill(bar: i32, colour: i32) -> None:
+    physical_y: i32 = 0 if bar == 0 else 440
+    ui_letterbox_fill_rect(0, physical_y, 640, 40, colour)
+
+
+def extension_letterbox_draw_text(bar: i32, row: i32, x: i32, message: str, colour: i32) -> i32:
+    if bar < 0 or bar > 1 or row < 0 or row > 1 or x < 0 or x >= 80: return 0
+    length: i32 = len(message)
+    available: i32 = 80 - x
+    draw_length: i32 = length if length < available else available
+    physical_y: i32 = 4 + row * 16 if bar == 0 else 444 + row * 16
+    index: i32 = 0
+    while index < draw_length:
+        ui_letterbox_put_cell((x + index) * 8, physical_y, ord(message[index]), colour)
+        index = index + 1
+    return draw_length
+
+
+def extension_letterbox_clear() -> None:
+    extension_letterbox_fill(0, 0)
+    extension_letterbox_fill(1, 0)
+
 def hex_digit(value: i32) -> i32:
     if value < 10:
         return 48 + value
@@ -230,6 +287,28 @@ def draw_achievement_title(identifier: i32, x: i32, y: i32, colour: i32) -> None
         character: i32 = (packed >> ((position % 4) * 8)) & 255
         if character != 0: text(x + position, y, character, colour)
         position = position + 1
+
+def draw_extension_notification() -> None:
+    if extension_notification_source < 0 or system_periods >= extension_notification_until: return
+    y: i32 = 16
+    while y < 20:
+        x: i32 = 53
+        while x < 79:
+            ui_put_cell(x, y, 32, 0x30)
+            x = x + 1
+        y = y + 1
+    # APP: <extension filename>
+    text(55, 16, 65, 0x3E); text(56, 16, 80, 0x3E); text(57, 16, 80, 0x3E); text(58, 16, 58, 0x3E)
+    name_length: i32 = extension_name_length(extension_notification_source)
+    if name_length > 17: name_length = 17
+    index: i32 = 0
+    while index < name_length:
+        text(60 + index, 16, extension_name_char(extension_notification_source, index), 0x3F)
+        index = index + 1
+    index = 0
+    while index < extension_notification_length:
+        text(55 + index, 18, extension_memory_get(976 + index), extension_notification_colour)
+        index = index + 1
 
 def draw_achievement_popup() -> None:
     if achievement_popup < 0 or system_periods >= achievement_popup_until: return

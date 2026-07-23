@@ -109,7 +109,9 @@ def fs_format() -> bool:
     fs_buffer_clear()
     if not ata_write_sector(13): return False
     fs_buffer_clear()
-    return ata_write_sector(14)
+    if not ata_write_sector(14): return False
+    fs_buffer_clear()
+    return ata_write_sector(15)
 
 
 def score_record_valid(offset: i32) -> bool:
@@ -241,6 +243,411 @@ def fs_save_settings() -> None:
     if ata_write_sector(9):
         settings_generation = generation
         settings_slot = new_slot
+# Extension setting capability bits:
+#   1 settings.read, 2 settings.write, 4 settings.save, 8 autostart
+# Extension sources opt in with, for example:
+#   # permissions: settings.read settings.write settings.save autostart
+def fs_autostart_identifier() -> i32:
+    if fs_ready == 0 or not ata_read_sector(15): return -1
+    if fs_buffer_get(0) != 65 or fs_buffer_get(1) != 85 or fs_buffer_get(2) != 84 or fs_buffer_get(3) != 79: return -1
+    if fs_buffer_get(4) != 1: return -1
+    length: i32 = fs_buffer_get(5)
+    if length <= 0 or length > 31: return -1
+    checksum: i32 = 0x4155544F ^ length
+    index: i32 = 0
+    while index < length:
+        checksum = checksum ^ (fs_buffer_get(8 + index) << (index & 3))
+        index = index + 1
+    if fs_get_u32(40) != checksum: return -1
+    return extension_autostart_match(length)
+
+
+def fs_set_autostart(identifier: i32, enabled: i32) -> i32:
+    if fs_ready == 0: return -1
+    fs_buffer_clear()
+    if enabled != 0:
+        length: i32 = extension_name_length(identifier)
+        if length <= 0 or length > 31: return -2
+        fs_buffer_set(0, 65); fs_buffer_set(1, 85); fs_buffer_set(2, 84); fs_buffer_set(3, 79)
+        fs_buffer_set(4, 1); fs_buffer_set(5, length)
+        checksum: i32 = 0x4155544F ^ length
+        index: i32 = 0
+        while index < length:
+            character: i32 = extension_name_char(identifier, index)
+            fs_buffer_set(8 + index, character)
+            checksum = checksum ^ (character << (index & 3))
+            index = index + 1
+        fs_put_u32(40, checksum)
+    if not ata_write_sector(15): return -3
+    return 0
+
+
+def extension_admin_set_autostart(identifier: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 2048) == 0: return -1
+    if identifier < -1 or identifier >= extension_count(): return -2
+    if identifier < 0: return fs_set_autostart(0, 0)
+    if extension_background_capable(identifier) == 0: return -3
+    return fs_set_autostart(identifier, 1)
+
+
+def extension_admin_autostart_get() -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 2048) == 0: return -1
+    return fs_autostart_identifier()
+
+
+def extension_admin_permission_get(identifier: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 2048) == 0: return -1
+    if identifier < 0 or identifier >= extension_count(): return -2
+    return extension_permission_mask(identifier)
+
+
+def extension_setting_get(key: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 1) == 0: return -1
+    if key == 0: return color_mode
+    if key == 1: return gravity_periods
+    if key == 2: return control_mode
+    if key == 3: return bgm_volume
+    if key == 4: return se_volume
+    if key == 5: return debug_enabled
+    if key == 6: return clock_enabled
+    if key == 7: return ghost_enabled
+    if key == 8: return music_mode
+    if key == 100:
+        configured: i32 = fs_autostart_identifier()
+        return 1 if configured == extension_current_id else 0
+    return -2
+
+
+def extension_setting_set(key: i32, value: i32) -> i32:
+    global color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, music_mode
+    if extension_current_id < 0: return -1
+    if key == 100:
+        if (extension_current_permissions & 8) == 0: return -3
+        return fs_set_autostart(extension_current_id, value)
+    if (extension_current_permissions & 2) == 0: return -3
+    if key == 0:
+        if value < 0 or value > 5: return -4
+        color_mode = value
+        vga_set_palette(color_mode)
+    elif key == 1:
+        if value < 10 or value > 100: return -4
+        gravity_periods = value
+    elif key == 2:
+        if value < 0 or value > 1: return -4
+        control_mode = value
+    elif key == 3:
+        if value < 0 or value > 10: return -4
+        bgm_volume = value
+    elif key == 4:
+        if value < 0 or value > 10: return -4
+        se_volume = value
+    elif key == 5:
+        if value < 0 or value > 1: return -4
+        debug_enabled = value
+    elif key == 6:
+        if value < 0 or value > 1: return -4
+        clock_enabled = value
+    elif key == 7:
+        if value < 0 or value > 1: return -4
+        ghost_enabled = value
+    elif key == 8:
+        if value < 0 or value > 2: return -4
+        music_mode = value
+    else:
+        return -2
+    if (extension_current_permissions & 4) != 0: fs_save_settings()
+    return 0
+
+# Each extension receives a stable 500-byte sector selected from its filename
+# hash. Sector headers detect the unlikely event of a hash-slot collision.
+def extension_storage_prepare(create: i32) -> i32:
+    key: i32 = extension_storage_key(extension_current_id)
+    if key < 0 or fs_ready == 0: return -1
+    lba: i32 = 256 + (key & 8191)
+    if not ata_read_sector(lba): return -2
+    valid_magic: bool = fs_buffer_get(0) == 69 and fs_buffer_get(1) == 88 and fs_buffer_get(2) == 83 and fs_buffer_get(3) == 84
+    if valid_magic:
+        if fs_get_u32(4) != key: return -5
+        return lba
+    if create == 0: return 0
+    fs_buffer_clear()
+    fs_buffer_set(0, 69); fs_buffer_set(1, 88); fs_buffer_set(2, 83); fs_buffer_set(3, 84)
+    fs_put_u32(4, key)
+    return lba
+
+
+def extension_storage_get(index: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if index < 0 or index >= 500: return -3
+    lba: i32 = extension_storage_prepare(0)
+    if lba < 0: return lba
+    if lba == 0: return 0
+    return fs_buffer_get(12 + index)
+
+
+def extension_storage_set(index: i32, value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    if index < 0 or index >= 500 or value < 0 or value > 255: return -3
+    lba: i32 = extension_storage_prepare(1)
+    if lba < 0: return lba
+    fs_buffer_set(12 + index, value)
+    return 0 if ata_write_sector(lba) else -2
+
+
+def extension_storage_get_u32(index: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if index < 0 or index > 496: return -3
+    lba: i32 = extension_storage_prepare(0)
+    if lba < 0: return lba
+    if lba == 0: return 0
+    return fs_get_u32(12 + index)
+
+
+def extension_storage_set_u32(index: i32, value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    if index < 0 or index > 496: return -3
+    lba: i32 = extension_storage_prepare(1)
+    if lba < 0: return lba
+    fs_put_u32(12 + index, value)
+    return 0 if ata_write_sector(lba) else -2
+
+
+# High-level key/value storage. The 500-byte private payload is divided into
+# 25 exact-name records: 15 key bytes, one length byte, and one i32 value.
+def extension_storage_kv_validate(key: str) -> i32:
+    length: i32 = len(key)
+    if length <= 0 or length > 15: return -1
+    index: i32 = 0
+    while index < length:
+        character: i32 = ord(key[index])
+        if character < 32 or character > 126: return -1
+        index = index + 1
+    return length
+
+
+def extension_storage_kv_find(key: str) -> i32:
+    length: i32 = extension_storage_kv_validate(key)
+    if length < 0: return -3
+    slot: i32 = 0
+    while slot < 25:
+        offset: i32 = 12 + slot * 20
+        stored_length: i32 = fs_buffer_get(offset + 15)
+        if stored_length == length:
+            same: bool = True
+            index: i32 = 0
+            while same and index < length:
+                if fs_buffer_get(offset + index) != ord(key[index]): same = False
+                index = index + 1
+            if same: return slot
+        slot = slot + 1
+    return -1
+
+
+def extension_storage_kv_get(key: str, default_value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if extension_storage_kv_validate(key) < 0: return -3
+    lba: i32 = extension_storage_prepare(0)
+    if lba < 0: return lba
+    if lba == 0: return default_value
+    slot: i32 = extension_storage_kv_find(key)
+    if slot < 0: return default_value
+    return fs_get_u32(12 + slot * 20 + 16)
+
+
+def extension_storage_kv_has(key: str) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if extension_storage_kv_validate(key) < 0: return -3
+    lba: i32 = extension_storage_prepare(0)
+    if lba < 0: return lba
+    if lba == 0: return 0
+    return 1 if extension_storage_kv_find(key) >= 0 else 0
+
+
+def extension_storage_kv_set(key: str, value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    length: i32 = extension_storage_kv_validate(key)
+    if length < 0: return -3
+    lba: i32 = extension_storage_prepare(1)
+    if lba < 0: return lba
+    slot: i32 = extension_storage_kv_find(key)
+    if slot < 0:
+        slot = 0
+        while slot < 25 and fs_buffer_get(12 + slot * 20 + 15) != 0:
+            slot = slot + 1
+        if slot >= 25: return -6
+    offset: i32 = 12 + slot * 20
+    index: i32 = 0
+    while index < 15:
+        fs_buffer_set(offset + index, ord(key[index]) if index < length else 0)
+        index = index + 1
+    fs_buffer_set(offset + 15, length)
+    fs_put_u32(offset + 16, value)
+    return 0 if ata_write_sector(lba) else -2
+
+
+def extension_storage_kv_delete(key: str) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    if extension_storage_kv_validate(key) < 0: return -3
+    lba: i32 = extension_storage_prepare(0)
+    if lba < 0: return lba
+    if lba == 0: return 0
+    slot: i32 = extension_storage_kv_find(key)
+    if slot < 0: return 0
+    offset: i32 = 12 + slot * 20
+    index: i32 = 0
+    while index < 20:
+        fs_buffer_set(offset + index, 0)
+        index = index + 1
+    return 0 if ata_write_sector(lba) else -2
+
+
+# Multi-sector .KV format. This is separate from the compact 500-byte store.
+# Each extension owns one virtual NAME.KV area of eight sectors: one header
+# plus seven data sectors containing 16 fixed records each (112 total).
+def extension_kvfile_prepare(create: i32) -> i32:
+    key: i32 = extension_storage_key(extension_current_id)
+    if key < 0 or fs_ready == 0: return -1
+    base_lba: i32 = 16384 + (key & 2047) * 8
+    if not ata_read_sector(base_lba): return -2
+    valid_magic: bool = fs_buffer_get(0) == 75 and fs_buffer_get(1) == 86 and fs_buffer_get(2) == 70 and fs_buffer_get(3) == 49
+    if valid_magic:
+        if fs_get_u32(4) != key: return -5
+        return base_lba
+    if create == 0: return 0
+    fs_buffer_clear()
+    fs_buffer_set(0, 75); fs_buffer_set(1, 86); fs_buffer_set(2, 70); fs_buffer_set(3, 49)
+    fs_put_u32(4, key)
+    fs_buffer_set(8, 1)
+    fs_buffer_set(9, 23)
+    fs_buffer_set(10, 112)
+    if not ata_write_sector(base_lba): return -2
+    page: i32 = 1
+    while page < 8:
+        fs_buffer_clear()
+        if not ata_write_sector(base_lba + page): return -2
+        page = page + 1
+    return base_lba
+
+
+def extension_kvfile_validate(key: str) -> i32:
+    length: i32 = len(key)
+    if length <= 0 or length > 23: return -1
+    index: i32 = 0
+    while index < length:
+        character: i32 = ord(key[index])
+        if character < 32 or character > 126: return -1
+        index = index + 1
+    return length
+
+
+def extension_kvfile_find(base_lba: i32, key: str) -> i32:
+    length: i32 = extension_kvfile_validate(key)
+    if length < 0: return -3
+    page: i32 = 0
+    while page < 7:
+        if not ata_read_sector(base_lba + 1 + page): return -2
+        record: i32 = 0
+        while record < 16:
+            offset: i32 = record * 32
+            stored_length: i32 = fs_buffer_get(offset + 23)
+            if stored_length == length:
+                same: bool = True
+                index: i32 = 0
+                while same and index < length:
+                    if fs_buffer_get(offset + index) != ord(key[index]): same = False
+                    index = index + 1
+                if same: return page * 16 + record
+            record = record + 1
+        page = page + 1
+    return -1
+
+
+def extension_kvfile_get(key: str, default_value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if extension_kvfile_validate(key) < 0: return -3
+    base_lba: i32 = extension_kvfile_prepare(0)
+    if base_lba < 0: return base_lba
+    if base_lba == 0: return default_value
+    slot: i32 = extension_kvfile_find(base_lba, key)
+    if slot == -1: return default_value
+    if slot < 0: return slot
+    offset: i32 = (slot % 16) * 32
+    value: i32 = fs_get_u32(offset + 24)
+    if fs_get_u32(offset + 28) != (value ^ extension_storage_key(extension_current_id)): return -7
+    return value
+
+
+def extension_kvfile_has(key: str) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 256) == 0: return -1
+    if extension_kvfile_validate(key) < 0: return -3
+    base_lba: i32 = extension_kvfile_prepare(0)
+    if base_lba < 0: return base_lba
+    if base_lba == 0: return 0
+    slot: i32 = extension_kvfile_find(base_lba, key)
+    if slot < -1: return slot
+    return 1 if slot >= 0 else 0
+
+
+def extension_kvfile_set(key: str, value: i32) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    length: i32 = extension_kvfile_validate(key)
+    if length < 0: return -3
+    base_lba: i32 = extension_kvfile_prepare(1)
+    if base_lba < 0: return base_lba
+    slot: i32 = extension_kvfile_find(base_lba, key)
+    if slot < -1: return slot
+    if slot < 0:
+        page: i32 = 0
+        while page < 7 and slot < 0:
+            if not ata_read_sector(base_lba + 1 + page): return -2
+            record: i32 = 0
+            while record < 16 and slot < 0:
+                if fs_buffer_get(record * 32 + 23) == 0: slot = page * 16 + record
+                record = record + 1
+            page = page + 1
+        if slot < 0: return -6
+    page = slot // 16
+    if not ata_read_sector(base_lba + 1 + page): return -2
+    offset: i32 = (slot % 16) * 32
+    index: i32 = 0
+    while index < 23:
+        fs_buffer_set(offset + index, ord(key[index]) if index < length else 0)
+        index = index + 1
+    fs_buffer_set(offset + 23, length)
+    fs_put_u32(offset + 24, value)
+    fs_put_u32(offset + 28, value ^ extension_storage_key(extension_current_id))
+    return 0 if ata_write_sector(base_lba + 1 + page) else -2
+
+
+def extension_kvfile_delete(key: str) -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    if extension_kvfile_validate(key) < 0: return -3
+    base_lba: i32 = extension_kvfile_prepare(0)
+    if base_lba < 0: return base_lba
+    if base_lba == 0: return 0
+    slot: i32 = extension_kvfile_find(base_lba, key)
+    if slot == -1: return 0
+    if slot < 0: return slot
+    page: i32 = slot // 16
+    if not ata_read_sector(base_lba + 1 + page): return -2
+    offset: i32 = (slot % 16) * 32
+    index: i32 = 0
+    while index < 32:
+        fs_buffer_set(offset + index, 0)
+        index = index + 1
+    return 0 if ata_write_sector(base_lba + 1 + page) else -2
+
+
+def extension_storage_clear() -> i32:
+    if extension_current_id < 0 or (extension_current_permissions & 512) == 0: return -1
+    key: i32 = extension_storage_key(extension_current_id)
+    if key < 0 or fs_ready == 0: return -1
+    lba: i32 = 256 + (key & 8191)
+    fs_buffer_clear()
+    fs_buffer_set(0, 69); fs_buffer_set(1, 88); fs_buffer_set(2, 83); fs_buffer_set(3, 84)
+    fs_put_u32(4, key)
+    return 0 if ata_write_sector(lba) else -2
+
 def fs_reset_data() -> None:
     global high_score, high_generation, high_slot, color_mode, gravity_periods, settings_generation, settings_slot, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, music_mode, max_combo, combo_generation, combo_slot, total_play_periods, total_lines, total_pieces, stats_generation, stats_slot, achievements, achievement_generation, achievement_slot
     high_score = 0
@@ -280,6 +687,8 @@ def fs_reset_data() -> None:
     ata_write_sector(12)
     fs_buffer_clear()
     ata_write_sector(13)
+    fs_buffer_clear()
+    ata_write_sector(15)
 
 def any_music_record_valid(offset: i32) -> bool:
     if fs_buffer_get(offset) != 65 or fs_buffer_get(offset + 1) != 77: return False

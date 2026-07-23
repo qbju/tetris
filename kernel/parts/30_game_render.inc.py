@@ -424,6 +424,7 @@ def draw() -> None:
         text(55, 22, 84, 0x0E); text(56, 22, 73, 0x0E); text(57, 22, 77, 0x0E); text(58, 22, 69, 0x0E)
         text(60, 22, 48 + (live_seconds // 600) % 10, 0x0F); text(61, 22, 48 + (live_seconds // 60) % 10, 0x0F); text(62, 22, 58, 0x0F); text(63, 22, 48 + (live_seconds % 60) // 10, 0x0F); text(64, 22, 48 + live_seconds % 10, 0x0F)
     draw_achievement_popup()
+    draw_extension_notification()
     if game_over == 1:
         text(31, 8, 71, 0x0C); text(32, 8, 65, 0x0C)
         text(33, 8, 77, 0x0C); text(34, 8, 69, 0x0C)
@@ -451,9 +452,13 @@ def boot_logo_row(letter: i32, row: i32) -> i32:
 
 
 def boot_wait(periods: i32) -> None:
+    global boot_safe_mode
     pit_reset_elapsed()
     while pit_poll_elapsed(periods) == 0:
-        pass
+        boot_key: i32 = keyboard_scancode()
+        if boot_key == 0x0F:
+            boot_safe_mode = 1
+            extension_draw_text_centered(23, "SAFE BOOT - AUTOSTART SKIPPED", 0x0E)
 
 
 def boot_screen() -> None:
@@ -497,6 +502,7 @@ def boot_screen() -> None:
     text(24, 18, 72, 0x07); text(25, 18, 73, 0x07); text(26, 18, 71, 0x07); text(27, 18, 72, 0x07)
     text(29, 18, 83, 0x07); text(30, 18, 67, 0x07); text(31, 18, 79, 0x07); text(32, 18, 82, 0x07); text(33, 18, 69, 0x07)
     put_number(high_score, 48, 18)
+    extension_draw_text_centered(23, "TAB: SAFE BOOT", 0x07)
     # PIT-paced loading bar, about one second total.
     progress: i32 = 0
     while progress < 50:

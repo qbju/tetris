@@ -17,6 +17,7 @@ def draw_current_menu_page() -> None:
         draw_extensions()
     else:
         extension_draw(extension_active)
+    draw_extension_notification()
 
 
 def begin_ui_transition() -> None:
@@ -40,7 +41,7 @@ def update_ui_transition() -> None:
     if reveal >= 320: ui_transition_active = 0
 
 def kernel_main() -> None:
-    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length, extension_selection, extension_active, ui_transition_active
+    global piece_x, piece_y, rotation, ticks, key_cooldown, started, last_key, menu_drawn, grounded, game_initialized, game_over_drawn, debug_visible, menu_page, menu_selection, settings_selection, settings_page, reset_choice, color_mode, gravity_periods, control_mode, bgm_volume, se_volume, debug_enabled, clock_enabled, ghost_enabled, debug_visible, fps_value, fps_frames, fps_deadline, total_play_periods, total_lines, total_pieces, stats_last_period, achievement_selection, achievement_detail_open, game_mode, sprint_lines, sprint_start_period, sprint_elapsed_periods, session_hold_used, session_tspins, last_action_rotation, survivor_start_period, score, music_mode, music_editor_note, music_name_editing, music_name_length, extension_selection, extension_active, ui_transition_active, extension_notification_source, extension_notification_dirty, extension_redraw_requested
     vga_set_mode13()
     cell: i32 = 0
     while cell < 240:
@@ -49,12 +50,23 @@ def kernel_main() -> None:
     pit_init()
     boot_screen()
     vga_set_palette(color_mode)
+    startup_extension: i32 = fs_autostart_identifier()
+    if boot_safe_mode == 0 and startup_extension >= 0 and startup_extension < extension_count() and extension_background_capable(startup_extension) != 0:
+        extension_enter(startup_extension)
+        extension_background_start(startup_extension)
+        menu_page = 0
+        menu_drawn = 0
     redraw: i32 = 0
     while True:
         redraw = 0
         pit_update_clock()
         sound_update()
-        if started == 0 and menu_page == 8: extension_update(extension_active)
+        extension_background_update_all()
+        if started == 0 and menu_page == 8:
+            extension_update(extension_active)
+            if extension_redraw_requested == 1:
+                extension_redraw_requested = 0
+                menu_drawn = 0
         key: i32 = keyboard_scancode()
         if started == 1 and system_periods > stats_last_period:
             total_play_periods = total_play_periods + system_periods - stats_last_period
@@ -78,14 +90,14 @@ def kernel_main() -> None:
 
         if started == 0:
             if menu_drawn == 0:
+                ui_set_render_target(1)
+                draw_current_menu_page()
+                ui_set_render_target(0)
                 if menu_page == 8:
-                    ui_set_render_target(0)
-                    draw_current_menu_page()
                     ui_transition_active = 0
+                    ui_present_diff(320)
+                    extension_native_overlay(extension_active)
                 else:
-                    ui_set_render_target(1)
-                    draw_current_menu_page()
-                    ui_set_render_target(0)
                     begin_ui_transition()
                 menu_drawn = 1
                 debug_reset()
@@ -123,6 +135,7 @@ def kernel_main() -> None:
                         music_start()
                         stats_last_period = system_periods
                         survivor_start_period = system_periods
+                        extension_emit_event(4, game_mode)
                         draw()
                     elif menu_selection == 1:
                         menu_page = 1
@@ -247,9 +260,20 @@ def kernel_main() -> None:
                     extension_selection = (extension_selection + 1) % extension_total
                     menu_drawn = 0
                 elif key == 0x1C and extension_total > 0:
-                    extension_active = extension_selection
-                    extension_enter(extension_active)
-                    menu_page = 8
+                    if keyboard_shifted == 1:
+                        configured_extension: i32 = fs_autostart_identifier()
+                        if configured_extension == extension_selection:
+                            fs_set_autostart(extension_selection, 0)
+                            sound_tone(1808, 1)
+                        elif extension_background_capable(extension_selection) != 0:
+                            fs_set_autostart(extension_selection, 1)
+                            sound_tone(1193, 2)
+                        else:
+                            sound_tone(904, 3)
+                    else:
+                        extension_active = extension_selection
+                        extension_enter(extension_active)
+                        menu_page = 8
                     menu_drawn = 0
                 elif key == 0x01:
                     menu_page = 0
@@ -403,6 +427,7 @@ def kernel_main() -> None:
                 if grounded == 1 and not fits(piece_x, piece_y + 1, rotation):
                     completed_t_spin: i32 = 1 if is_t_spin() else 0
                     merge_piece()
+                    extension_emit_event(5, kind)
                     if completed_t_spin == 1:
                         session_tspins = session_tspins + 1
                         score = score + 400
@@ -410,6 +435,7 @@ def kernel_main() -> None:
                         if session_tspins >= 5: unlock_achievement(23)
                     flash_completed_lines()
                     cleared_lines: i32 = clear_lines()
+                    if cleared_lines > 0: extension_emit_event(1, cleared_lines)
                     update_combo(cleared_lines)
                     if cleared_lines > 0 and board_is_empty(): unlock_achievement(19)
                     if ghost_enabled == 0 and score > 1000: unlock_achievement(20)
@@ -457,6 +483,14 @@ def kernel_main() -> None:
                 game_over_drawn = 0
                 arm_move_cooldown(15)
                 debug_reset()
+        if extension_notification_dirty == 1:
+            extension_notification_dirty = 0
+            if started == 1 and game_over == 0: draw()
+            else: menu_drawn = 0
+        if extension_notification_source >= 0 and system_periods >= extension_notification_until:
+            extension_notification_source = -1
+            if started == 1 and game_over == 0: draw()
+            else: menu_drawn = 0
         if achievement_popup >= 0 and system_periods >= achievement_popup_until:
             achievement_popup = -1
             if started == 1 and game_over == 0:
